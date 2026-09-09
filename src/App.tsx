@@ -21,6 +21,7 @@ function App() {
   const [predictions, setPredictions] = useState<Prediction[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [patientId, setPatientId] = useState<string>('') // State for patient ID
   const inputRef = useRef<HTMLInputElement>(null)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -40,6 +41,7 @@ function App() {
     setPredictions([])
 
     const formData = new FormData()
+    formData.append('patient_id', patientId) //add the patient ID entered by the user to the form data
     files.forEach(f => formData.append('images', f))
 
     try {
@@ -65,6 +67,12 @@ function App() {
         <section className="upload-section">
           <h2>Upload Retinal Images</h2>
           <div className="upload-controls">
+            <input
+              type="text"
+              placeholder="Patient ID"
+              value={patientId}
+              onChange={e => setPatientId(e.target.value)}
+            />
             <input
               ref={inputRef}
               type="file"
