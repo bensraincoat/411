@@ -1,6 +1,6 @@
 import time
 from flask import Flask, request, jsonify
-from assessment_db import init_db, add_assessment, update_assessment
+from assessment_db import init_db, add_assessment, update_assessment, get_assessments
 
 app = Flask(__name__)
 init_db() #makes sures the assessments table exists when the API starts
@@ -58,7 +58,9 @@ def get_current_time():
 @app.route('/api/predict', methods=['POST'])
 def predict():
     files = request.files.getlist('images')
-    patient_id = request.form.get('patient_id', 'unknown')  
+    patient_id = request.form.get('patient_id', '').strip()
+    if not patient_id:
+        return jsonify({'error': 'Patient ID is required'}), 400    
     if not files or all(f.filename == '' for f in files):
         return jsonify({'error': 'No images provided'}), 400
 
@@ -80,3 +82,8 @@ def predict():
         })
 
     return jsonify({'predictions': predictions})
+
+@app.route('/api/assessments')
+def assessments():
+    assessments = get_assessments()
+    return jsonify({'assessments': assessments})

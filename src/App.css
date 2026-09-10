@@ -177,3 +177,21 @@ body {
   color: #dc2626;
   font-size: 0.875rem;
 }
+
+.assessment-list {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.assessment-card {
+  padding: 16px;
+  border: 1px solid #444;
+  border-radius: 8px;
+  color:white;
+}
+
+.assessment-card p {
+  margin: 6px 0;
+  color: white;
+}

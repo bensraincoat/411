@@ -53,7 +53,7 @@ def get_assessments():
     cursor = conn.cursor()
 
     # retrievs all assessments from the database
-    cursor.execute('SELECT * FROM assessments')
+    cursor.execute('SELECT * FROM assessments ORDER BY id DESC')
     assessments = cursor.fetchall()
 
     conn.close()
