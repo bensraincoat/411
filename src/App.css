@@ -7,10 +7,10 @@
 :root {
   --teal: #0d9488;
   --teal-dark: #0f766e;
-  --bg: #242424;
+  --bg: #0f0f0f;
   --black: #000;
   --surface: #ffffff;
-  --border: #e2e8f0;
+  --border: #607085;
   --text: #1e293b;
   --text-muted: #64748b;
   --grade-0: #16a34a;
@@ -22,7 +22,7 @@
 
 body {
   font-family: system-ui, -apple-system, sans-serif;
-  background: var(--bg);
+  background: var(--black);
   color: var(--text);
   min-height: 100vh;
 }
@@ -31,11 +31,18 @@ body {
   background: var(--black);
   color: white;
   padding: 0.5rem 0.5rem;
+  text-align: center;
 }
 
 .app-header h1 {
   font-size: 1.75rem;
   font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.app-header h2 {
+  font-size: 1.25rem;
+  font-weight: 400;
   letter-spacing: 0.05em;
 }
 
@@ -51,11 +58,19 @@ body {
   padding: 0 1.5rem;
 }
 
+.subtitle {
+  font-size: 1.25rem;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  padding: 1.75rem;
+}
+
 .upload-section {
   background: var(--black);
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: 0.75rem;
   padding: 1.75rem;
+  font-weight: 400;
 }
 
 .upload-section h2 {
@@ -84,7 +99,7 @@ body {
   padding: 0.5rem 1.25rem;
   border-radius: 0.375rem;
   font-size: 0.9rem;
-  font-weight: 500;
+  font-weight: 400;
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -105,7 +120,7 @@ body {
   padding: 0.5rem 1.25rem;
   border-radius: 0.375rem;
   font-size: 0.9rem;
-  font-weight: 500;
+  font-weight: 400;
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -135,7 +150,7 @@ body {
 }
 
 .filename {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: var(--text-muted);
   padding: 0.5rem 0.75rem;
   border-bottom: 1px solid var(--border);
@@ -181,14 +196,16 @@ body {
 .assessment-list {
   display: grid;
   gap: 16px;
-  margin-top: 16px;
 }
 
 .assessment-card {
-  padding: 16px;
-  border: 1px solid #444;
-  border-radius: 8px;
-  color:white;
+  border: 2px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--black);
+  font-size: 0.9rem;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  padding: 1.75rem;
 }
 
 .assessment-card p {

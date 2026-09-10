@@ -78,8 +78,9 @@ function App() {
       </header>
 
       <main className="app-main">
+        <h2 className="subtitle">Upload Retinal Images</h2>
+
         <section className="upload-section">
-          <h2>Upload Retinal Images</h2>
           <div className="upload-controls">
             <input
               type="text"
@@ -117,6 +118,7 @@ function App() {
             </button>
           </div>
 
+
           {previews.length > 0 && (
             <div className="preview-grid">
               {previews.map((src, i) => (
@@ -139,7 +141,9 @@ function App() {
 
           {error && <p className="error">{error}</p>}
         </section>
-        <h2>Assessment History</h2>
+
+         <h2 className="subtitle">Assessment History</h2>
+
         {assessments.length === 0 ? (
           <p>No assessments yet</p>
         ) : (
