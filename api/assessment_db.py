@@ -23,6 +23,14 @@ def init_db():
             message TEXT
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS patients (
+            patient_id TEXT PRIMARY KEY,
+            first_name TEXT NOT NULL,
+            last_name TEXT NOT NULL,
+            date_of_birth TEXT NOT NULL
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -73,7 +81,32 @@ def update_assessment(assessment_id, grade, label, confidence, message, status):
     conn.commit()
     conn.close()
 
+def add_patient(patient_id, first_name, last_name, date_of_birth):
+    conn = sqlite3.connect(Database_NAME)
+    cursor = conn.cursor()
+
+    # Insert a new patient into the database
+    cursor.execute('''
+        INSERT INTO patients (patient_id, first_name, last_name, date_of_birth)
+        VALUES (?, ?, ?, ?)
+    ''', (patient_id, first_name, last_name, date_of_birth))
+
+    conn.commit()
+    conn.close()
+def get_patient(patient_id):
+    conn = sqlite3.connect(Database_NAME)
+    conn.row_factory = sqlite3.Row  # allows us to access columns by name
+    cursor = conn.cursor()
+
+    # Retrieve the patient with the given ID
+    cursor.execute('SELECT * FROM patients WHERE patient_id = ?', (patient_id,))
+    patient = cursor.fetchone()
+
+    conn.close()
+    return dict(patient) if patient else None  # convert sqlite3.Row to dict if found, else return None
 if __name__ == "__main__":
         init_db()
+        print(get_patient("TEST600"))
+        #add_patient("TEST600", "John", "Doe", "2026-06-07")
         #add_assessment("67890", "assessment1.jpg", "pending")
         #print(get_assessments())

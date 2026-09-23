@@ -89,6 +89,13 @@ function PhotoRing({
   )
 }
 
+type Patient = {
+  patient_id: string
+  first_name: string
+  last_name: string
+  date_of_birth: string
+}
+
 function App() {
   const [files, setFiles] = useState<File[]>([])
   const [previews, setPreviews] = useState<string[]>([])
@@ -99,6 +106,29 @@ function App() {
   const [patientId, setPatientId] = useState('')
   const [assessments, setAssessments] = useState<Assessment[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
+  const [searchPatientId, setSearchPatientId] = useState('')
+  const [profileSearchId, setProfileSearchId] = useState('')
+  const [patientProfile, setPatientProfile] = useState<Patient | null>(null)
+  const [profileError, setProfileError] = useState('')
+
+  const loadPatientProfile = async () => {
+    if (profileSearchId.trim() === '') {
+      setPatientProfile(null)
+      setProfileError('')
+      return
+    }
+    
+    setPatientProfile(null) // Clear previous profile while loading
+    setProfileError('') // Clear previous error
+    const res = await fetch(`/api/patients/${profileSearchId.trim()}`)
+    const data = await res.json()
+    if (!res.ok) {
+      setPatientProfile(null)
+      setProfileError('Patient not found')
+      return
+    }
+    setPatientProfile(data.patient)
+  }
 
   const loadAssessments = async () => {
     try {
@@ -287,14 +317,55 @@ function App() {
           </section>
         )}
 
+        <section className="patient-profile">
+          <h2>Patient Profile</h2>
+
+          <input
+            type="text"
+            placeholder="Enter Patient ID"
+            value={profileSearchId}
+            onChange={(e) => setProfileSearchId(e.target.value)}
+          />
+
+          <button onClick={loadPatientProfile}>
+            Search Patient
+          </button>
+
+          {profileError && <p>{profileError}</p>}
+          {patientProfile && (
+            <p>
+              Patient ID: {patientProfile.patient_id}<br />
+              Name: {patientProfile.first_name} {patientProfile.last_name}
+              Date of Birth: {patientProfile.date_of_birth}
+            </p>
+          )}
+        </section>
+        
+
         <section className="history">
           <h2>Assessment history</h2>
-
+          <input className="history-search"
+            type="text"
+            placeholder="Search by Patient ID"
+            value={searchPatientId}
+            onChange={(e) => setSearchPatientId(e.target.value)}
+          />
+          {searchPatientId.trim() !== '' &&
+            assessments.length > 0 &&
+            !assessments.some((a) =>
+              a.patient_id.toLowerCase().includes(searchPatientId.trim().toLowerCase())
+            ) && (
+              <p className="history-empty">
+                No assessments found for this Patient ID.
+              </p>
+            )}
           {assessments.length === 0 ? (
             <p className="history-empty">No assessments yet. Process a photograph above to start one.</p>
           ) : (
             <div className="assessment-list">
-              {assessments.map((a) => {
+              {assessments.filter((a) => 
+                a.patient_id.toLowerCase().includes(searchPatientId.trim().toLowerCase())
+              ).map((a) => {
                 const grade = a.label ? LABEL_TO_GRADE[a.label] : undefined
                 const dotColor = grade !== undefined ? GRADE_COLOR(grade) : 'var(--line)'
                 const isDone = a.status === 'completed'

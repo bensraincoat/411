@@ -1,6 +1,6 @@
 import time
 from flask import Flask, request, jsonify
-from assessment_db import init_db, add_assessment, update_assessment, get_assessments
+from assessment_db import init_db, add_assessment, update_assessment, get_assessments, get_patient
 
 app = Flask(__name__)
 init_db() #makes sures the assessments table exists when the API starts
@@ -87,3 +87,11 @@ def predict():
 def assessments():
     assessments = get_assessments()
     return jsonify({'assessments': assessments})
+
+@app.route('/api/patients/<patient_id>', methods=['GET'])
+def get_patient_info(patient_id):
+    patient = get_patient(patient_id)
+    if patient:
+        return jsonify({'patient': patient})
+    else:
+        return jsonify({'error': 'Patient not found'}), 404

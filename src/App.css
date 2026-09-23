@@ -412,3 +412,14 @@
     transition: none;
   }
 }
+.history .history-search {
+  width: 100%;
+  max-width: 360px;
+  padding: 12px 16px;
+  margin: 12px 0 20px;
+  border: 1px solid #ddd8ce;
+  border-radius: 10px;
+  background: #fff;
+  color: #222;
+  font-size: 16px;
+}
