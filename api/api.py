@@ -404,18 +404,20 @@ def doctor_stats():
             "error": "Doctor access required"
         }), 403
 
-    patients = get_all_patients()
+    patient_ids = get_active_patients_for_doctor(
+        doctor["id"]
+    )
 
     awaiting_review = 0
 
-    for patient in patients:
+    for patient_id in patient_ids:
         latest = get_latest_assessment_for_patient(
-            patient["id"]
+            patient_id
         )
 
         if latest:
             notes = get_notes_for_patient(
-                patient["id"]
+                patient_id
             )
 
             reviewed_by_this_doctor = any(
@@ -427,14 +429,10 @@ def doctor_stats():
                 awaiting_review += 1
 
     return jsonify({
-        "active_patients": len(patients),
+        "active_patients": len(patient_ids),
         "awaiting_review": awaiting_review,
-
-        # We can connect this to doctor-specific
-        # appointments later.
         "todays_visits": 0,
     })
-
 
 @app.route("/api/doctor/patients", methods=["GET"])
 def doctor_patients():
@@ -455,11 +453,21 @@ def doctor_patients():
         ""
     ).strip().lower()
 
-    patients = get_all_patients()
+    patient_ids = get_active_patients_for_doctor(
+        doctor["id"]
+    )
 
     results = []
 
-    for patient in patients:
+    for patient_id in patient_ids:
+        patient = get_user_by_id(patient_id)
+
+        if patient is None:
+            continue
+
+        if patient["role"] != "patient":
+            continue
+
         if query:
             search_text = (
                 patient["full_name"]
@@ -492,6 +500,15 @@ def get_patient_route(patient_id):
     if doctor["role"] != "doctor":
         return jsonify({
             "error": "Doctor access required"
+        }), 403
+
+    allowed_patients = get_active_patients_for_doctor(
+        doctor["id"]
+    )
+
+    if patient_id not in allowed_patients:
+        return jsonify({
+            "error": "This patient has not granted you access"
         }), 403
 
     patient = get_user_by_id(patient_id)
@@ -529,6 +546,15 @@ def save_doctor_note_route(patient_id):
         return jsonify({
             "error": "Doctor access required"
         }), 403
+        allowed_patients = get_active_patients_for_doctor(
+            doctor["id"]
+        )
+
+        if patient_id not in allowed_patients:
+            return jsonify({
+                "error": "This patient has not granted you access"
+            }), 403
+
 
     patient = get_user_by_id(patient_id)
 

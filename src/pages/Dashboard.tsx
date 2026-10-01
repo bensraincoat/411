@@ -149,6 +149,36 @@ export function Dashboard() {
     }
   }
 
+  async function removeClinician() {
+  if (!activeConsent) {
+    return;
+  }
+
+  const confirmed = window.confirm(
+    "Remove this clinician? They will no longer have access to your screening records."
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  setClinicianError("");
+  setSavingDoctorId(activeConsent.doctor_id);
+
+  try {
+    const updatedConsent = await setConsent(
+      activeConsent.doctor_id,
+      "revoked"
+    );
+
+    setConsents([updatedConsent]);
+    setClinicianPicker(false);
+  } catch (err) {
+    setClinicianError(errorMessage(err));
+  } finally {
+    setSavingDoctorId(null);
+  }
+}
 
   return (
     <AppShell>
@@ -419,6 +449,15 @@ export function Dashboard() {
                   >
                     Change clinician
                   </Button>
+
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={removeClinician}
+                  >
+                    Remove clinician
+                  </Button>
+
                 </>
 
               ) : (
@@ -796,7 +835,6 @@ export function Dashboard() {
           </div>
 
         )}
-
       </main>
     </AppShell>
   );
