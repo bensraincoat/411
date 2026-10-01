@@ -198,3 +198,19 @@ def delete_auth_token(token):
 
     conn.commit()
     conn.close()
+
+def get_all_patients():
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT *
+        FROM users
+        WHERE role = 'patient'
+        ORDER BY full_name ASC
+    """)
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    return [dict(row) for row in rows]

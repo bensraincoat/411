@@ -27,3 +27,4 @@ api/__pycache__/
 api/assessments.db
 api/users.db
 api/appointments.db
+api/doctor_notes.db

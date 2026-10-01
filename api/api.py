@@ -8,12 +8,16 @@ from assessment_db import (
     add_assessment,
     update_assessment,
     get_assessments,
+    get_assessments_for_patient,
+    get_latest_assessment_for_patient,
 )
 
 from users_db import (
     init_users_db,
     create_user,
     get_user_by_email_role,
+    get_user_by_id,
+    get_all_patients,
     create_auth_token,
     get_user_by_token,
     delete_auth_token,
@@ -25,13 +29,24 @@ from appointments_db import (
     get_appointments_for_user,
 )
 
+from doctor_notes_db import (
+    init_doctor_notes_db,
+    add_doctor_note,
+    get_notes_for_patient,
+)
+
 
 app = Flask(__name__)
 
-# Make sure database tables exist when Flask starts
+
+# -------------------------------------------------
+# Initialize databases
+# -------------------------------------------------
+
 init_db()
 init_users_db()
 init_appointments_db()
+init_doctor_notes_db()
 
 
 # -------------------------------------------------
@@ -84,7 +99,7 @@ GRADE_INFO = {
 
 
 # -------------------------------------------------
-# Authentication helper functions
+# Helper functions
 # -------------------------------------------------
 
 def public_user(user):
@@ -103,6 +118,42 @@ def get_bearer_token():
         return None
 
     return auth_header[7:].strip()
+
+
+def authenticated_user():
+    token = get_bearer_token()
+
+    if not token:
+        return None
+
+    return get_user_by_token(token)
+
+
+def patient_summary(patient):
+    latest = get_latest_assessment_for_patient(patient["id"])
+
+    initials = "".join(
+        word[0].upper()
+        for word in patient["full_name"].split()
+        if word
+    )[:2]
+
+    result = {
+        "id": patient["id"],
+        "name": patient["full_name"],
+        "initials": initials,
+    }
+
+    if latest:
+        result.update({
+            "latest_grade": latest["grade"],
+            "latest_label": latest["label"],
+            "latest_scan_at": latest["date_created"],
+            "latest_confidence": latest["confidence"],
+            "latest_explanation": latest["message"],
+        })
+
+    return result
 
 
 # -------------------------------------------------
@@ -133,7 +184,9 @@ def register():
             "error": "Password must be at least 8 characters"
         }), 400
 
-    if role == "doctor" and not str(data.get("license_number", "")).strip():
+    if role == "doctor" and not str(
+        data.get("license_number", "")
+    ).strip():
         return jsonify({
             "error": "License number is required for ophthalmologists"
         }), 400
@@ -187,7 +240,10 @@ def login():
             "error": "Invalid email, password, or account type"
         }), 401
 
-    if not check_password_hash(user["password_hash"], password):
+    if not check_password_hash(
+        user["password_hash"],
+        password
+    ):
         return jsonify({
             "error": "Invalid email, password, or account type"
         }), 401
@@ -202,18 +258,11 @@ def login():
 
 @app.route("/api/auth/me", methods=["GET"])
 def current_user():
-    token = get_bearer_token()
-
-    if not token:
-        return jsonify({
-            "error": "Authentication required"
-        }), 401
-
-    user = get_user_by_token(token)
+    user = authenticated_user()
 
     if user is None:
         return jsonify({
-            "error": "Invalid or expired login"
+            "error": "Authentication required"
         }), 401
 
     return jsonify(public_user(user))
@@ -232,7 +281,7 @@ def logout():
 
 
 # -------------------------------------------------
-# Doctors
+# Doctors available for appointments
 # -------------------------------------------------
 
 DEMO_DOCTORS = [
@@ -268,18 +317,11 @@ def doctors():
 
 @app.route("/api/appointments", methods=["POST"])
 def create_appointment_route():
-    token = get_bearer_token()
-
-    if not token:
-        return jsonify({
-            "error": "Authentication required"
-        }), 401
-
-    user = get_user_by_token(token)
+    user = authenticated_user()
 
     if user is None:
         return jsonify({
-            "error": "Invalid or expired login"
+            "error": "Authentication required"
         }), 401
 
     if user["role"] != "patient":
@@ -289,10 +331,21 @@ def create_appointment_route():
 
     data = request.get_json(silent=True) or {}
 
-    doctor_id = str(data.get("doctor_id", "")).strip()
-    date = str(data.get("date", "")).strip()
-    appointment_time = str(data.get("time", "")).strip()
-    reason = str(data.get("reason", "")).strip()
+    doctor_id = str(
+        data.get("doctor_id", "")
+    ).strip()
+
+    date = str(
+        data.get("date", "")
+    ).strip()
+
+    appointment_time = str(
+        data.get("time", "")
+    ).strip()
+
+    reason = str(
+        data.get("reason", "")
+    ).strip()
 
     if not doctor_id or not date or not appointment_time:
         return jsonify({
@@ -300,8 +353,12 @@ def create_appointment_route():
         }), 400
 
     doctor = next(
-        (d for d in DEMO_DOCTORS if d["id"] == doctor_id),
-        None
+        (
+            d
+            for d in DEMO_DOCTORS
+            if d["id"] == doctor_id
+        ),
+        None,
     )
 
     if doctor is None:
@@ -323,27 +380,231 @@ def create_appointment_route():
 
 @app.route("/api/appointments", methods=["GET"])
 def list_appointments_route():
-    token = get_bearer_token()
+    user = authenticated_user()
 
-    if not token:
+    if user is None:
         return jsonify({
             "error": "Authentication required"
         }), 401
 
-    user = get_user_by_token(token)
-
-    if user is None:
-        return jsonify({
-            "error": "Invalid or expired login"
-        }), 401
-
-    appointments = get_appointments_for_user(user["id"])
+    appointments = get_appointments_for_user(
+        user["id"]
+    )
 
     return jsonify(appointments)
 
 
 # -------------------------------------------------
-# General API routes
+# Doctor portal
+# -------------------------------------------------
+
+@app.route("/api/doctor/stats", methods=["GET"])
+def doctor_stats():
+    doctor = authenticated_user()
+
+    if doctor is None:
+        return jsonify({
+            "error": "Authentication required"
+        }), 401
+
+    if doctor["role"] != "doctor":
+        return jsonify({
+            "error": "Doctor access required"
+        }), 403
+
+    patients = get_all_patients()
+
+    awaiting_review = 0
+
+    for patient in patients:
+        latest = get_latest_assessment_for_patient(
+            patient["id"]
+        )
+
+        if latest:
+            notes = get_notes_for_patient(
+                patient["id"]
+            )
+
+            reviewed_by_this_doctor = any(
+                note["doctor_id"] == doctor["id"]
+                for note in notes
+            )
+
+            if not reviewed_by_this_doctor:
+                awaiting_review += 1
+
+    return jsonify({
+        "active_patients": len(patients),
+        "awaiting_review": awaiting_review,
+
+        # We can connect this to doctor-specific
+        # appointments later.
+        "todays_visits": 0,
+    })
+
+
+@app.route("/api/doctor/patients", methods=["GET"])
+def doctor_patients():
+    doctor = authenticated_user()
+
+    if doctor is None:
+        return jsonify({
+            "error": "Authentication required"
+        }), 401
+
+    if doctor["role"] != "doctor":
+        return jsonify({
+            "error": "Doctor access required"
+        }), 403
+
+    query = request.args.get(
+        "q",
+        ""
+    ).strip().lower()
+
+    patients = get_all_patients()
+
+    results = []
+
+    for patient in patients:
+        if query:
+            search_text = (
+                patient["full_name"]
+                + " "
+                + patient["id"]
+            ).lower()
+
+            if query not in search_text:
+                continue
+
+        results.append(
+            patient_summary(patient)
+        )
+
+    return jsonify(results)
+
+
+@app.route(
+    "/api/patients/<patient_id>",
+    methods=["GET"]
+)
+def get_patient_route(patient_id):
+    doctor = authenticated_user()
+
+    if doctor is None:
+        return jsonify({
+            "error": "Authentication required"
+        }), 401
+
+    if doctor["role"] != "doctor":
+        return jsonify({
+            "error": "Doctor access required"
+        }), 403
+
+    patient = get_user_by_id(patient_id)
+
+    if (
+        patient is None
+        or patient["role"] != "patient"
+    ):
+        return jsonify({
+            "error": "Patient not found"
+        }), 404
+
+    return jsonify(
+        patient_summary(patient)
+    )
+
+
+# -------------------------------------------------
+# Doctor notes
+# -------------------------------------------------
+
+@app.route(
+    "/api/patients/<patient_id>/notes",
+    methods=["POST"]
+)
+def save_doctor_note_route(patient_id):
+    doctor = authenticated_user()
+
+    if doctor is None:
+        return jsonify({
+            "error": "Authentication required"
+        }), 401
+
+    if doctor["role"] != "doctor":
+        return jsonify({
+            "error": "Doctor access required"
+        }), 403
+
+    patient = get_user_by_id(patient_id)
+
+    if (
+        patient is None
+        or patient["role"] != "patient"
+    ):
+        return jsonify({
+            "error": "Patient not found"
+        }), 404
+
+    data = request.get_json(
+        silent=True
+    ) or {}
+
+    note = str(
+        data.get("note", "")
+    ).strip()
+
+    follow_up = str(
+        data.get("follow_up", "")
+    ).strip()
+
+    scan_id = data.get("scan_id")
+
+    if not note:
+        return jsonify({
+            "error": "Doctor note is required"
+        }), 400
+
+    saved_note = add_doctor_note(
+        patient_id=patient_id,
+        doctor_id=doctor["id"],
+        doctor_name=doctor["full_name"],
+        note=note,
+        follow_up=follow_up,
+        scan_id=scan_id,
+    )
+
+    return jsonify(saved_note), 201
+
+
+@app.route(
+    "/api/patients/me/notes",
+    methods=["GET"]
+)
+def patient_notes():
+    patient = authenticated_user()
+
+    if patient is None:
+        return jsonify({
+            "error": "Authentication required"
+        }), 401
+
+    if patient["role"] != "patient":
+        return jsonify({
+            "error": "Patient access required"
+        }), 403
+
+    notes = get_notes_for_patient(
+        patient["id"]
+    )
+
+    return jsonify(notes)
+
+
+# -------------------------------------------------
+# General API route
 # -------------------------------------------------
 
 @app.route("/api/time")
@@ -354,14 +615,32 @@ def get_current_time():
 
 
 # -------------------------------------------------
-# Retinal prediction route
+# Retinal prediction
 # -------------------------------------------------
 
-@app.route("/api/predict", methods=["POST"])
+@app.route(
+    "/api/predict",
+    methods=["POST"]
+)
 def predict():
-    files = request.files.getlist("images")
-    patient_id = request.form.get("patient_id", "").strip()
-    model = request.form.get("model", "").strip()
+    files = request.files.getlist(
+        "images"
+    )
+
+    patient_id = request.form.get(
+        "patient_id",
+        ""
+    ).strip()
+
+    signed_in_user = authenticated_user()
+
+    if signed_in_user and signed_in_user["role"] == "patient":
+        patient_id = signed_in_user["id"]
+
+    model = request.form.get(
+        "model",
+        ""
+    ).strip()
 
     if not patient_id:
         return jsonify({
@@ -381,7 +660,13 @@ def predict():
             "error": "Invalid analysis model"
         }), 400
 
-    if not files or all(f.filename == "" for f in files):
+    if (
+        not files
+        or all(
+            f.filename == ""
+            for f in files
+        )
+    ):
         return jsonify({
             "error": "No images provided"
         }), 400
@@ -396,8 +681,7 @@ def predict():
         )
 
         # TODO:
-        # Replace this placeholder with real AI inference
-        # after the CNN models have been trained.
+        # Replace with real trained AI model.
         grade = 0
         confidence = 0.94
 
@@ -430,7 +714,10 @@ def predict():
 # Assessment history
 # -------------------------------------------------
 
-@app.route("/api/assessments", methods=["GET"])
+@app.route(
+    "/api/assessments",
+    methods=["GET"]
+)
 def assessments():
     assessment_list = get_assessments()
 
