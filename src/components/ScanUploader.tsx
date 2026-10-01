@@ -105,6 +105,8 @@ export function ScanUploader({ compare = false }: { compare?: boolean }) {
                       <>
                         <div className="result-top"><span className={`grade grade-${grade ?? 0}`}>Level {grade ?? "–"}</span>{confidence !== undefined && <span>{pct(confidence)}% confidence</span>}</div>
                         <h3>{label}</h3>
+                        
+                        {p?.model && <p><b>Model:</b> {p.model}</p>}
                         {c ? (
                           <div className="comparison-list">
                             {c.results.map((r) => <div key={r.model}><span>{r.model}</span><strong>Level {r.grade} · {pct(r.confidence)}%</strong></div>)}

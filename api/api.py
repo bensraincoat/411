@@ -59,8 +59,19 @@ def get_current_time():
 def predict():
     files = request.files.getlist('images')
     patient_id = request.form.get('patient_id', '').strip()
+    model = request.form.get('model', ' ').strip()
     if not patient_id:
-        return jsonify({'error': 'Patient ID is required'}), 400    
+        return jsonify({'error': 'Patient ID is required'}), 400
+        allowed_models = {
+            'DenseNet121',
+            'ResNet50'
+            'InceptionV3'
+            'MobileNetV2'
+            'Xception'
+        }
+        if model not in allowed_models:
+            return jsonify({'error': 'Invalid analysis model'}), 400
+
     if not files or all(f.filename == '' for f in files):
         return jsonify({'error': 'No images provided'}), 400
 
@@ -75,6 +86,7 @@ def predict():
         update_assessment(assessment_id, grade, info['label'], confidence, info['message'], 'completed')  # Update assessment with results
         predictions.append({
             'filename': f.filename,
+            'model': model,
             'grade': grade,
             'label': info['label'],
             'confidence': confidence,  # placeholder

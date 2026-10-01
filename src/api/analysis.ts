@@ -20,6 +20,7 @@ export async function predictRetinalImage(
   const response = await apiRequest<{
     predictions: Array<{
       filename: string;
+      model: string;
       grade: 0 | 1 | 2 | 3 | 4;
       label: string;
       confidence: number;
@@ -37,7 +38,7 @@ export async function predictRetinalImage(
     label: prediction.label,
     confidence: prediction.confidence,
     explanation: prediction.message,
-    model: model,
+    model: prediction.model,
   };
 }
 
