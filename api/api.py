@@ -18,6 +18,7 @@ from users_db import (
     get_user_by_email_role,
     get_user_by_id,
     get_all_patients,
+    get_all_doctors,
     create_auth_token,
     get_user_by_token,
     delete_auth_token,
@@ -35,6 +36,13 @@ from doctor_notes_db import (
     get_notes_for_patient,
 )
 
+from consents_db import (
+    init_consents_db,
+    set_patient_doctor_consent,
+    get_consents_for_patient,
+    get_active_patients_for_doctor,
+)
+
 
 app = Flask(__name__)
 
@@ -47,6 +55,7 @@ init_db()
 init_users_db()
 init_appointments_db()
 init_doctor_notes_db()
+init_consents_db()
 
 
 # -------------------------------------------------
@@ -284,32 +293,21 @@ def logout():
 # Doctors available for appointments
 # -------------------------------------------------
 
-DEMO_DOCTORS = [
-    {
-        "id": "doctor-1",
-        "name": "Dr. Amina Morgan",
-        "specialty": "Retina specialist",
-        "clinic": "VisionCare Clinic",
-    },
-    {
-        "id": "doctor-2",
-        "name": "Dr. Daniel Lee",
-        "specialty": "Ophthalmologist",
-        "clinic": "Lakeview Eye Center",
-    },
-    {
-        "id": "doctor-3",
-        "name": "Dr. Priya Raman",
-        "specialty": "Retina specialist",
-        "clinic": "Northside Vision",
-    },
-]
-
-
 @app.route("/api/doctors", methods=["GET"])
 def doctors():
-    return jsonify(DEMO_DOCTORS)
+    registered_doctors = get_all_doctors()
 
+    results = []
+
+    for doctor in registered_doctors:
+        results.append({
+            "id": doctor["id"],
+            "name": doctor["full_name"],
+            "specialty": "Ophthalmologist",
+            "clinic": doctor["clinic"] or "Clinic not provided", 
+        })
+
+    return jsonify(results)
 
 # -------------------------------------------------
 # Appointment routes
@@ -352,16 +350,10 @@ def create_appointment_route():
             "error": "Doctor, date, and time are required"
         }), 400
 
-    doctor = next(
-        (
-            d
-            for d in DEMO_DOCTORS
-            if d["id"] == doctor_id
-        ),
-        None,
-    )
+    doctor = get_user_by_id(doctor_id)
+        
 
-    if doctor is None:
+    if doctor is None or doctor["role"] != "doctor":
         return jsonify({
             "error": "Selected doctor was not found"
         }), 404
@@ -369,7 +361,7 @@ def create_appointment_route():
     appointment = create_appointment(
         patient_id=user["id"],
         doctor_id=doctor_id,
-        doctor_name=doctor["name"],
+        doctor_name=doctor["full_name"],
         date=date,
         time=appointment_time,
         reason=reason,
@@ -613,6 +605,97 @@ def get_current_time():
         "time": time.time()
     }
 
+# -------------------------------------------------
+# Patient clinician consent
+# -------------------------------------------------
+
+@app.route("/api/patients/me/consents", methods=["GET"])
+def list_patient_consents():
+    patient = authenticated_user()
+
+    if patient is None:
+        return jsonify({
+            "error": "Authentication required"
+        }), 401
+
+    if patient["role"] != "patient":
+        return jsonify({
+            "error": "Patient access required"
+        }), 403
+
+    consent_rows = get_consents_for_patient(
+        patient["id"]
+    )
+
+    results = []
+
+    for consent in consent_rows:
+        doctor = get_user_by_id(
+            consent["doctor_id"]
+        )
+
+        if doctor is None:
+            continue
+
+        results.append({
+            "doctor_id": doctor["id"],
+            "doctor_name": doctor["full_name"],
+            "status": consent["status"],
+        })
+
+    return jsonify(results)
+
+
+@app.route(
+    "/api/patients/me/consents/<doctor_id>",
+    methods=["PUT"]
+)
+def update_patient_consent(doctor_id):
+    patient = authenticated_user()
+
+    if patient is None:
+        return jsonify({
+            "error": "Authentication required"
+        }), 401
+
+    if patient["role"] != "patient":
+        return jsonify({
+            "error": "Patient access required"
+        }), 403
+
+    doctor = get_user_by_id(doctor_id)
+
+    if doctor is None or doctor["role"] != "doctor":
+        return jsonify({
+            "error": "Doctor not found"
+        }), 404
+
+    data = request.get_json(silent=True) or {}
+
+    status = str(
+        data.get("status", "")
+    ).strip().lower()
+
+    if status not in {
+        "active",
+        "revoked",
+        "pending",
+    }:
+        return jsonify({
+            "error": "Invalid consent status"
+        }), 400
+
+    set_patient_doctor_consent(
+        patient["id"],
+        doctor_id,
+        status,
+    )
+
+    return jsonify({
+        "doctor_id": doctor["id"],
+        "doctor_name": doctor["full_name"],
+        "status": status,
+    })
 
 # -------------------------------------------------
 # Retinal prediction

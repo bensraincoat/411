@@ -214,3 +214,19 @@ def get_all_patients():
     conn.close()
 
     return [dict(row) for row in rows]
+
+def get_all_doctors():
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT *
+        FROM users
+        WHERE role = 'doctor'
+        ORDER BY full_name ASC
+    """)
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    return [dict(row) for row in rows]
