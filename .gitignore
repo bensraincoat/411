@@ -25,3 +25,5 @@ dist-ssr
 api/venv/
 api/__pycache__/
 api/assessments.db
+api/users.db
+api/appointments.db
