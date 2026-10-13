@@ -11,6 +11,13 @@
 		- Ultimately it's not a huge deal and it could be an issue with my machine, but 100% worth being aware of for presentations
 		- If it works on Angie's then we can just use hers to demo
 	- If we're careful, we could dodge this for the midterm presentation... demo this last or navigate to pages that don't have images sequentially, we just want to avoid getting called out on this if possible
+- Uploading and demoing any image at all on the Compare page visually displays a 404 on the image card
+	- We cannot demo image uploads on this page at all
+	- These also disappear on switching pages
+- List of opthalmologists flickers and disappears on the "Book an appointment" page
+	- Sometimes it disappears quickly enough for it to be not noticeable, sometimes it sticks for a few seconds before blanking
+	- Looks like it's due to logic around the GET for /api/doctors?
+	- Might have to have placeholder data present or seeded for a doctor in the system
 
 ### Minor
 - No input validation for user-facing input fields aside from ints in height?
