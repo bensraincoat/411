@@ -73,6 +73,48 @@ def update_assessment(assessment_id, grade, label, confidence, message, status):
     conn.commit()
     conn.close()
 
+def get_assessments_for_patient(patient_id):
+    conn = sqlite3.connect(Database_NAME)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    cursor.execute(
+        '''
+        SELECT *
+        FROM assessments
+        WHERE patient_id = ?
+        ORDER BY id DESC
+        ''',
+        (patient_id,)
+    )
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    return [dict(row) for row in rows]
+
+
+def get_latest_assessment_for_patient(patient_id):
+    conn = sqlite3.connect(Database_NAME)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    cursor.execute(
+        '''
+        SELECT *
+        FROM assessments
+        WHERE patient_id = ?
+        ORDER BY id DESC
+        LIMIT 1
+        ''',
+        (patient_id,)
+    )
+
+    row = cursor.fetchone()
+    conn.close()
+
+    return dict(row) if row else None
+
 if __name__ == "__main__":
         init_db()
         #add_assessment("67890", "assessment1.jpg", "pending")
