@@ -28,6 +28,7 @@ from appointments_db import (
     init_appointments_db,
     create_appointment,
     get_appointments_for_user,
+    get_appointments_for_doctor,
 )
 
 from doctor_notes_db import (
@@ -378,10 +379,15 @@ def list_appointments_route():
         return jsonify({
             "error": "Authentication required"
         }), 401
+    
+    if user["role"] == "doctor":
+        appointments = get_appointments_for_doctor(user["id"])
+    else:
+        appointments = get_appointments_for_user(user["id"])
 
-    appointments = get_appointments_for_user(
-        user["id"]
-    )
+    #appointments = get_appointments_for_user(
+        #user["id"]
+    #)
 
     return jsonify(appointments)
 
@@ -757,11 +763,7 @@ def predict():
         }), 400
 
     allowed_models = {
-        "DenseNet121",
-        "ResNet50",
-        "InceptionV3",
-        "MobileNetV2",
-        "Xception",
+        "YOLO"
     }
 
     if model not in allowed_models:

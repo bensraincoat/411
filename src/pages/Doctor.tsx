@@ -15,8 +15,10 @@ import { Button, Input } from "../components/ui";
 import {
   errorMessage,
   getDoctorStats,
+  listAppointments,
   listSharedPatients,
   saveDoctorNote,
+  type Appointment,
   type Patient,
 } from "../api";
 
@@ -47,6 +49,11 @@ export function Doctor() {
       awaiting_review: 0,
       todays_visits: 0,
     }
+  );
+  
+  const { data: appointments } = useApi<Appointment[]>(
+    listAppointments,
+    []
   );
 
 
@@ -495,7 +502,30 @@ export function Doctor() {
 
         </div>
 
+        {/* Doctor appointments */}
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <span>Appointments</span>
+              <h2>Patient appointment requests</h2>
+            </div>
+            <CalendarDays />
+          </div>
 
+          {appointments.length === 0 ? (
+            <p>No appointment requests yet.</p>
+          ) : (
+            appointments.map((appointment) => (
+              <div key={appointment.id} className="patient-row">
+                <div>
+                  <strong>{appointment.date} at {appointment.time}</strong>
+                  <p>Reason: {appointment.reason || "Not provided"}</p>
+                  <small>Status: {appointment.status}</small>
+                </div>
+              </div>
+            ))
+          )}
+        </section>  
         <p className="privacy-line">
           Patient access is consent-based. Records
           disappear from this workspace when consent

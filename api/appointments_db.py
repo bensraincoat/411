@@ -108,3 +108,19 @@ def get_appointments_for_user(user_id):
     conn.close()
 
     return [dict(row) for row in rows]
+
+def get_appointments_for_doctor(doctor_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT *
+        FROM appointments
+        WHERE doctor_id = ?
+        ORDER BY date ASC, time ASC
+    """, (doctor_id,))
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    return [dict(row) for row in rows]

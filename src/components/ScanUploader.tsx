@@ -4,7 +4,7 @@ import { FileImage, LoaderCircle, ScanLine, Trash2, UploadCloud } from "lucide-r
 import { Button, Input } from "./ui";
 import { compareModels, confirmScanReview, errorMessage, predictRetinalImage, type ModelComparison, type Prediction } from "../api";
 
-export const MODELS = ["DenseNet121", "ResNet50", "InceptionV3", "MobileNetV2", "Xception"];
+export const MODELS = ["YOLO"];
 
 type ScanResult = {
   file: File;
@@ -20,8 +20,8 @@ const pct = (value: number) => Math.round(value <= 1 ? value * 100 : value);
 export function ScanUploader({ compare = false }: { compare?: boolean }) {
   const [files, setFiles] = useState<File[]>([]);
   const [patientId, setPatientId] = useState("P-10432");
-  const [model, setModel] = useState("DenseNet121");
-  const [selectedModels, setSelectedModels] = useState(["DenseNet121", "InceptionV3", "Xception"]);
+  const [model, setModel] = useState("YOLO");
+  const [selectedModels, setSelectedModels] = useState(["YOLO"]);
   const [results, setResults] = useState<ScanResult[]>([]);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
