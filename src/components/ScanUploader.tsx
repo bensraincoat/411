@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { FileImage, LoaderCircle, ScanLine, Trash2, UploadCloud } from "lucide-react";
 
 import { Button, Input } from "./ui";
-import { compareModels, confirmScanReview, errorMessage, predictRetinalImage, type ModelComparison, type Prediction } from "../api";
+import { confirmScanReview, errorMessage, predictRetinalImage, type Prediction } from "../api";
 
 export const MODELS = ["YOLO"];
 
@@ -10,18 +10,16 @@ type ScanResult = {
   file: File;
   url: string;
   prediction?: Prediction;
-  comparison?: ModelComparison;
   error?: string;
   confirmed?: boolean;
 };
 
 const pct = (value: number) => Math.round(value <= 1 ? value * 100 : value);
 
-export function ScanUploader({ compare = false }: { compare?: boolean }) {
+export function ScanUploader() {
   const [files, setFiles] = useState<File[]>([]);
   const [patientId, setPatientId] = useState("P-10432");
-  const [model, setModel] = useState("YOLO");
-  const [selectedModels, setSelectedModels] = useState(["YOLO"]);
+  const model = "YOLO";
   const [results, setResults] = useState<ScanResult[]>([]);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
@@ -39,13 +37,11 @@ export function ScanUploader({ compare = false }: { compare?: boolean }) {
   async function processFiles() {
     if (!files.length) return setError("Add at least one retinal photograph first.");
     if (!patientId.trim()) return setError("Enter a patient ID.");
-    if (compare && selectedModels.length < 2) return setError("Select at least two models to compare.");
     setError(""); setProcessing(true); setResults([]);
 
     const next = await Promise.all(files.map(async (file): Promise<ScanResult> => {
       const url = URL.createObjectURL(file);
       try {
-        if (compare) return { file, url, comparison: await compareModels(file, patientId.trim(), selectedModels) };
         return { file, url, prediction: await predictRetinalImage(file, patientId.trim(), model) };
       } catch (err) {
         return { file, url, error: errorMessage(err) };
@@ -69,11 +65,6 @@ export function ScanUploader({ compare = false }: { compare?: boolean }) {
     <div className="scan-workspace">
       <div className="scan-controls">
         <div className="field-group"><label htmlFor="patient-id">Patient ID</label><Input id="patient-id" value={patientId} onChange={(e) => setPatientId(e.target.value)} /></div>
-        {!compare ? (
-          <div className="field-group"><label htmlFor="model">Analysis model</label><select id="model" value={model} onChange={(e) => setModel(e.target.value)}>{MODELS.map((item) => <option key={item}>{item}</option>)}</select></div>
-        ) : (
-          <fieldset className="model-picker"><legend>Models to compare</legend>{MODELS.map((item) => <label key={item}><input type="checkbox" checked={selectedModels.includes(item)} onChange={() => setSelectedModels((current) => current.includes(item) ? current.filter((value) => value !== item) : [...current, item])} />{item}</label>)}</fieldset>
-        )}
       </div>
 
       <button type="button" className="drop-zone" onClick={() => inputRef.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); accept(e.dataTransfer.files); }}>
@@ -83,18 +74,17 @@ export function ScanUploader({ compare = false }: { compare?: boolean }) {
 
       {files.length > 0 && <div className="file-strip">{files.map((file, index) => <div key={`${file.name}-${index}`}><FileImage /><span>{file.name}</span><button aria-label={`Remove ${file.name}`} onClick={() => setFiles((current) => current.filter((_, i) => i !== index))}><Trash2 /></button></div>)}</div>}
       {error && <p className="form-error" role="alert">{error}</p>}
-      <div className="process-row"><span>{files.length} photograph{files.length === 1 ? "" : "s"} ready</span><div><Button variant="outline" onClick={() => { setFiles([]); setResults([]); }}>Clear</Button><Button onClick={processFiles} disabled={processing}>{processing ? <><LoaderCircle className="animate-spin" />Analyzing</> : <><ScanLine />{compare ? "Compare results" : "Analyze photographs"}</>}</Button></div></div>
+      <div className="process-row"><span>{files.length} photograph{files.length === 1 ? "" : "s"} ready</span><div><Button variant="outline" onClick={() => { setFiles([]); setResults([]); }}>Clear</Button><Button onClick={processFiles} disabled={processing}>{processing ? <><LoaderCircle className="animate-spin" />Analyzing</> : <><ScanLine />Analyze photographs</>}</Button></div></div>
 
       {results.length > 0 && (
         <section className="results-section" aria-live="polite">
-          <div className="section-heading"><span>Screening output</span><h2>{compare ? "Model comparison" : "Analysis results"}</h2></div>
+          <div className="section-heading"><span>Screening output</span><h2>Analysis results</h2></div>
           <div className="result-grid">
             {results.map((result, index) => {
               const p = result.prediction;
-              const c = result.comparison;
-              const grade = p?.grade ?? c?.consensus_grade ?? c?.results[0]?.grade;
-              const label = p?.label ?? c?.consensus_label ?? c?.results[0]?.label;
-              const confidence = p?.confidence ?? c?.results[0]?.confidence;
+              const grade = p?.grade;
+              const label = p?.label;
+              const confidence = p?.confidence;
               return (
                 <article className="result-card" key={result.url}>
                   <img src={result.url} alt={`Uploaded retinal photograph ${result.file.name}`} />
@@ -107,12 +97,7 @@ export function ScanUploader({ compare = false }: { compare?: boolean }) {
                         <h3>{label}</h3>
                         
                         {p?.model && <p><b>Model:</b> {p.model}</p>}
-                        {c ? (
-                          <div className="comparison-list">
-                            {c.results.map((r) => <div key={r.model}><span>{r.model}</span><strong>Level {r.grade} · {pct(r.confidence)}%</strong></div>)}
-                            {c.agreement !== undefined && <p><b>Agreement:</b> {c.agreement}/{c.results.length} models</p>}
-                          </div>
-                        ) : <p>{p?.explanation}</p>}
+                        <p>{p?.explanation}</p>
                       </>
                     )}
                     <div className="result-foot"><span>{result.file.name}</span>{!result.error && <Button variant="outline" size="sm" onClick={() => confirm(index)} disabled={result.confirmed}>{result.confirmed ? "Review confirmed" : "Confirm review"}</Button>}</div>

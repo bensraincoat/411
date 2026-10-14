@@ -3,7 +3,7 @@ import { Route, Routes, useLocation } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { Link } from "./router";
 import { Home } from "./pages/Home";
-import { Analyze, Compare } from "./pages/Screening";
+import { Analyze } from "./pages/Screening";
 import { Book } from "./pages/Book";
 import { Auth } from "./pages/Auth";
 import { Dashboard } from "./pages/Dashboard";
@@ -12,7 +12,6 @@ import { Doctor } from "./pages/Doctor";
 const titles: Record<string, string> = {
   "/": "openI — Diabetic Retinopathy Screening Support",
   "/analyze": "Analyze retinal photographs — openI",
-  "/compare": "Compare screening models — openI",
   "/book": "Book an appointment — openI",
   "/auth": "Sign in or register — openI",
   "/dashboard": "Patient dashboard — openI",
@@ -30,7 +29,6 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/analyze" element={<Analyze />} />
-      <Route path="/compare" element={<Compare />} />
       <Route path="/book" element={<Book />} />
       <Route path="/auth" element={<Auth />} />
       <Route path="/dashboard" element={<Dashboard />} />

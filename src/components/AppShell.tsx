@@ -71,7 +71,6 @@ export function AppShell({
           >
             <Link to="/">Overview</Link>
             <Link to="/analyze">Analyze</Link>
-            <Link to="/compare">Compare</Link>
           </nav>
 
           <div className="nav-actions">

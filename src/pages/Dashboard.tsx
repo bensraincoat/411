@@ -26,6 +26,7 @@ import {
 } from "../api";
 
 import { useApi } from "../hooks/useApi";
+import { getCurrentUser } from "../api/auth";
 
 
 export function Dashboard() {
@@ -38,6 +39,7 @@ export function Dashboard() {
 
   const { data: scans } = useApi(listMyScans, []);
   const { data: notes } = useApi(listMyNotes, []);
+  const { data: user } = useApi(getCurrentUser, null);
 
   const {
     data: consents,
@@ -186,7 +188,7 @@ export function Dashboard() {
 
         <PageIntro
           eyebrow="Patient portal"
-          title="Good morning, Patient"
+          title={`Good morning, ${user?.full_name?.split(" ")[0] || "Patient"}`}
           description="Your screening history, care team, and next steps—together in one private workspace."
         />
 
@@ -206,8 +208,8 @@ export function Dashboard() {
                 </h2>
 
                 <p>
-                  Start a guided review using one of five
-                  documented classification models.
+                  Upload retinal photographs for diabetic retinopathy
+                  screening using YOLO.
                 </p>
               </div>
 
