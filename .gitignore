@@ -28,4 +28,19 @@ api/assessments.db
 api/users.db
 api/appointments.db
 api/doctor_notes.db
-api/consents.db
+api/consents.db# RETINA26 model weights
+*.pt
+*.pth
+*.onnx
+# Local research databases
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+# Private environment files
+.env
+.env.*
+!.env.example
+# Python generated files
+__pycache__/
+*.pyc

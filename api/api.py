@@ -1,6 +1,11 @@
+import os
 import time
+from io import BytesIO
+from datetime import datetime
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
+from patient_note_visibility import get_hidden_note_ids, hide_note_for_patient
+from research_scans_db import init_research_db, save_scans, list_scans, latest_scan, find_image, find_scan
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from assessment_db import (
@@ -28,6 +33,9 @@ from appointments_db import (
     init_appointments_db,
     create_appointment,
     get_appointments_for_user,
+    get_appointments_for_doctor,
+    get_appointment_by_id,
+    update_appointment_status,
 )
 
 from doctor_notes_db import (
@@ -56,6 +64,7 @@ init_users_db()
 init_appointments_db()
 init_doctor_notes_db()
 init_consents_db()
+init_research_db()
 
 
 # -------------------------------------------------
@@ -139,7 +148,6 @@ def authenticated_user():
 
 
 def patient_summary(patient):
-    latest = get_latest_assessment_for_patient(patient["id"])
 
     initials = "".join(
         word[0].upper()
@@ -153,15 +161,18 @@ def patient_summary(patient):
         "initials": initials,
     }
 
-    if latest:
+    # Separate real model research runs from legacy demonstration assessments.
+    scan = latest_scan(patient["id"])
+    if scan:
         result.update({
-            "latest_grade": latest["grade"],
-            "latest_label": latest["label"],
-            "latest_scan_at": latest["date_created"],
-            "latest_confidence": latest["confidence"],
-            "latest_explanation": latest["message"],
+            "latest_grade": scan["grade"],
+            "latest_label": scan["label"],
+            "latest_scan_at": scan["created_at"],
+            "latest_confidence": scan["confidence"],
+            "latest_scan_id": scan["id"],
+            "latest_explanation": "Experimental RETINA26 classification; not a clinical diagnosis.",
+            "research_only": True,
         })
-
     return result
 
 
@@ -350,6 +361,14 @@ def create_appointment_route():
             "error": "Doctor, date, and time are required"
         }), 400
 
+    # Accept only valid future appointment requests at the API boundary.
+    try:
+        requested_at = datetime.fromisoformat(f"{date}T{appointment_time}")
+    except ValueError:
+        return jsonify({"error": "Invalid appointment date or time"}), 400
+    if requested_at <= datetime.now():
+        return jsonify({"error": "Choose a future appointment time"}), 400
+
     doctor = get_user_by_id(doctor_id)
         
 
@@ -373,22 +392,70 @@ def create_appointment_route():
 @app.route("/api/appointments", methods=["GET"])
 def list_appointments_route():
     user = authenticated_user()
-
     if user is None:
-        return jsonify({
-            "error": "Authentication required"
-        }), 401
+        return jsonify({"error": "Authentication required"}), 401
 
-    appointments = get_appointments_for_user(
-        user["id"]
-    )
+    if user["role"] == "patient":
+        appointments = get_appointments_for_user(user["id"])
+    elif user["role"] == "doctor":
+        appointments = get_appointments_for_doctor(user["id"])
+        # Only appointments addressed to this doctor are disclosed.
+        for appointment in appointments:
+            patient = get_user_by_id(appointment["patient_id"])
+            appointment["patient_name"] = (
+                patient["full_name"]
+                if patient is not None and patient["role"] == "patient"
+                else "Patient account"
+            )
+    else:
+        return jsonify({"error": "Invalid account role"}), 403
 
     return jsonify(appointments)
 
 
+@app.route("/api/appointments/<appointment_id>/status", methods=["PATCH"])
+def change_appointment_status_route(appointment_id):
+    doctor = authenticated_user()
+    if doctor is None:
+        return jsonify({"error": "Authentication required"}), 401
+    if doctor["role"] != "doctor":
+        return jsonify({"error": "Doctor access required"}), 403
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "A JSON request body is required"}), 400
+    new_status = str(data.get("status", "")).strip().lower()
+    if new_status not in {"confirmed", "declined"}:
+        return jsonify({"error": "Invalid status"}), 400
+
+    existing = get_appointment_by_id(appointment_id)
+    if existing is None or existing["doctor_id"] != doctor["id"]:
+        # Do not reveal which other doctors' appointment IDs exist.
+        return jsonify({"error": "Appointment not found"}), 404
+    if existing["status"] != "requested":
+        return jsonify({"error": "Appointment already processed"}), 409
+
+    updated = update_appointment_status(
+        appointment_id, doctor["id"], new_status
+    )
+    if updated is None:
+        return jsonify({
+            "error": "Request was already processed or the slot conflicts with a confirmed appointment"
+        }), 409
+    return jsonify(updated)
 # -------------------------------------------------
 # Doctor portal
 # -------------------------------------------------
+
+def count_today_confirmed_appointments(appointments, today):
+    """Count real confirmed appointments on the server-local calendar date."""
+    return sum(
+        1
+        for appointment in appointments
+        if appointment["status"] == "confirmed"
+        and appointment["date"] == today
+    )
+
 
 @app.route("/api/doctor/stats", methods=["GET"])
 def doctor_stats():
@@ -411,27 +478,26 @@ def doctor_stats():
     awaiting_review = 0
 
     for patient_id in patient_ids:
-        latest = get_latest_assessment_for_patient(
-            patient_id
-        )
-
+        latest = latest_scan(patient_id)
         if latest:
-            notes = get_notes_for_patient(
-                patient_id
-            )
-
+            notes = get_notes_for_patient(patient_id)
             reviewed_by_this_doctor = any(
                 note["doctor_id"] == doctor["id"]
+                and str(dict(note).get("scan_id") or "") == latest["id"]
                 for note in notes
             )
-
             if not reviewed_by_this_doctor:
                 awaiting_review += 1
+
+    confirmed_today = count_today_confirmed_appointments(
+        get_appointments_for_doctor(doctor["id"]),
+        time.strftime("%Y-%m-%d"),
+    )
 
     return jsonify({
         "active_patients": len(patient_ids),
         "awaiting_review": awaiting_review,
-        "todays_visits": 0,
+        "todays_visits": confirmed_today,
     })
 
 @app.route("/api/doctor/patients", methods=["GET"])
@@ -546,14 +612,14 @@ def save_doctor_note_route(patient_id):
         return jsonify({
             "error": "Doctor access required"
         }), 403
-        allowed_patients = get_active_patients_for_doctor(
-            doctor["id"]
-        )
+    allowed_patients = get_active_patients_for_doctor(
+        doctor["id"]
+    )
 
-        if patient_id not in allowed_patients:
-            return jsonify({
-                "error": "This patient has not granted you access"
-            }), 403
+    if patient_id not in allowed_patients:
+        return jsonify({
+            "error": "This patient has not granted you access"
+        }), 403
 
 
     patient = get_user_by_id(patient_id)
@@ -618,7 +684,10 @@ def patient_notes():
         patient["id"]
     )
 
-    return jsonify(notes)
+    # The patient can hide a note from their portal; the clinician record stays intact.
+    hidden_ids = get_hidden_note_ids(patient["id"])
+    visible_notes = [note for note in notes if str(note["id"]) not in hidden_ids]
+    return jsonify(visible_notes)
 
 
 # -------------------------------------------------
@@ -732,91 +801,159 @@ def update_patient_consent(doctor_id):
     methods=["POST"]
 )
 def predict():
-    files = request.files.getlist(
-        "images"
-    )
-
-    patient_id = request.form.get(
-        "patient_id",
-        ""
-    ).strip()
-
-    signed_in_user = authenticated_user()
-
-    if signed_in_user and signed_in_user["role"] == "patient":
-        patient_id = signed_in_user["id"]
-
-    model = request.form.get(
-        "model",
-        ""
-    ).strip()
-
-    if not patient_id:
+    # Research-only inference. No images or scores are saved to any database.
+    if os.environ.get("RETINA26_RESEARCH_MODE") != "1":
         return jsonify({
-            "error": "Patient ID is required"
-        }), 400
+            "error": "Model testing is disabled. Start the research server with npm run api:retina",
+            "code": "RESEARCH_MODE_DISABLED",
+        }), 503
 
-    allowed_models = {
-        "DenseNet121",
-        "ResNet50",
-        "InceptionV3",
-        "MobileNetV2",
-        "Xception",
-    }
+    # Limit request body before Flask parses uploaded multipart data.
+    request.max_content_length = 61 * 1024 * 1024
+    patient = authenticated_user()
+    if patient is None:
+        return jsonify({"error": "Sign in as a patient to run a research test"}), 401
+    if patient["role"] != "patient":
+        return jsonify({"error": "Only patient accounts can test screening"}), 403
 
-    if model not in allowed_models:
+    images = request.files.getlist("images")
+    if not images or len(images) > 6:
+        return jsonify({"error": "Choose between 1 and 6 JPG/PNG photographs"}), 400
+
+    # Reject oversized requests before inference. The individual files are
+    # validated by retina26_inference (MIME headers alone are not sufficient).
+    if request.content_length and request.content_length > 61 * 1024 * 1024:
+        return jsonify({"error": "Upload exceeds the 60 MB size limit"}), 413
+
+    try:
+        from retina26_inference import predict_image_bytes
+    except ImportError:
         return jsonify({
-            "error": "Invalid analysis model"
-        }), 400
-
-    if (
-        not files
-        or all(
-            f.filename == ""
-            for f in files
-        )
-    ):
-        return jsonify({
-            "error": "No images provided"
-        }), 400
+            "error": "RETINA26 dependencies are missing. Start Flask with npm run api:retina",
+            "code": "MODEL_RUNTIME_NOT_READY",
+        }), 503
 
     predictions = []
+    entries = []
+    for file in images:
+        # Never use a client-supplied filename as a filesystem path.
+        filename = (file.filename or "image").replace("\\", "/").split("/")[-1]
+        raw = file.stream.read(10 * 1024 * 1024 + 1)
+        try:
+            prediction = predict_image_bytes(raw, filename)
+            predictions.append(prediction)
+            # Enforce image magic bytes before saving research uploads.
+            if raw.startswith(b"\x89PNG\r\n\x1a\n"):
+                mime = "image/png"
+            elif raw.startswith(b"\xff\xd8\xff"):
+                mime = "image/jpeg"
+            else:
+                return jsonify({"error": f"{filename}: unsupported image format"}), 400
+            entries.append((filename, raw, mime, prediction))
+        except ValueError as exc:
+            return jsonify({"error": f"{filename}: {exc}"}), 400
+        except FileNotFoundError as exc:
+            return jsonify({"error": str(exc), "code": "MODEL_NOT_READY"}), 503
+        except Exception:
+            app.logger.exception("RETINA26 inference failed")
+            return jsonify({"error": "RETINA26 inference failed; review the Flask terminal"}), 500
 
-    for f in files:
-        assessment_id = add_assessment(
-            patient_id,
-            f.filename,
-            "pending",
-        )
+    try:
+        ids = save_scans(patient["id"], entries)
+    except Exception:
+        app.logger.exception("Could not save research scan records")
+        return jsonify({"error": "Prediction succeeded but could not be saved; please retry"}), 500
 
-        # TODO:
-        # Replace with real trained AI model.
-        grade = 0
-        confidence = 0.94
-
-        info = GRADE_INFO[grade]
-
-        update_assessment(
-            assessment_id,
-            grade,
-            info["label"],
-            confidence,
-            info["message"],
-            "completed",
-        )
-
-        predictions.append({
-            "filename": f.filename,
-            "model": model,
-            "grade": grade,
-            "label": info["label"],
-            "confidence": confidence,
-            "message": info["message"],
-        })
-
+    for prediction, scan_id in zip(predictions, ids):
+        prediction["scan_id"] = scan_id
+        prediction["research_only"] = True
     return jsonify({
-        "predictions": predictions
+        "predictions": predictions,
+        "research_only": True,
+        "persisted": True,
+        "notice": "Experimental RETINA26 research outputs saved to patient test history; not a clinical diagnosis.",
     })
+
+# -------------------------------------------------
+# Authenticated RETINA26 research histories and image access
+# -------------------------------------------------
+
+@app.route("/api/patients/me/scans", methods=["GET"])
+def patient_research_scans():
+    patient = authenticated_user()
+    if patient is None:
+        return jsonify({"error": "Authentication required"}), 401
+    if patient["role"] != "patient":
+        return jsonify({"error": "Patient access required"}), 403
+    return jsonify(list_scans(patient["id"]))
+
+
+@app.route("/api/doctor/patients/<patient_id>/scans", methods=["GET"])
+def doctor_research_scans(patient_id):
+    doctor = authenticated_user()
+    if doctor is None:
+        return jsonify({"error": "Authentication required"}), 401
+    if doctor["role"] != "doctor":
+        return jsonify({"error": "Doctor access required"}), 403
+    if patient_id not in get_active_patients_for_doctor(doctor["id"]):
+        return jsonify({"error": "Patient has not granted access"}), 403
+    return jsonify(list_scans(patient_id))
+
+
+@app.route("/api/research-scans/<scan_id>/explanation", methods=["GET"])
+def protected_research_explanation(scan_id):
+    """Compute a research-only Grad-CAM on demand; never expose it publicly."""
+    if os.environ.get("RETINA26_RESEARCH_MODE") != "1":
+        return jsonify({"error": "Research mode is disabled"}), 503
+    viewer = authenticated_user()
+    if viewer is None:
+        return jsonify({"error": "Authentication required"}), 401
+    scan = find_scan(scan_id)
+    if scan is None:
+        return jsonify({"error": "Research scan not found"}), 404
+    owner_id = scan["patient_id"]
+    allowed = viewer["role"] == "patient" and viewer["id"] == owner_id
+    if viewer["role"] == "doctor":
+        allowed = owner_id in get_active_patients_for_doctor(viewer["id"])
+    if not allowed:
+        # Same response for non-existent scans and scans without permission.
+        return jsonify({"error": "Research scan not found"}), 404
+    stored = find_image(scan_id)
+    if stored is None:
+        return jsonify({"error": "Research image unavailable"}), 404
+    try:
+        from retina26_explain import explain_image
+        explained = explain_image(stored["image_bytes"], expected_grade=int(scan["grade"]))
+    except (ValueError, RuntimeError) as exc:
+        app.logger.warning("RETINA26 Grad-CAM unavailable: %s", exc)
+        return jsonify({"error": "Explanation unavailable for this image. The saved prediction remains unchanged."}), 422
+    except Exception:
+        app.logger.exception("RETINA26 Grad-CAM failed")
+        return jsonify({"error": "Unable to generate AI explanation right now"}), 500
+    response = jsonify(explained)
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+@app.route("/api/research-scans/<scan_id>/image", methods=["GET"])
+def protected_research_image(scan_id):
+    viewer = authenticated_user()
+    if viewer is None:
+        return jsonify({"error": "Authentication required"}), 401
+    scan = find_image(scan_id)
+    if scan is None:
+        return jsonify({"error": "Image not found"}), 404
+    owner_id = scan["patient_id"]
+    allowed = (viewer["role"] == "patient" and viewer["id"] == owner_id)
+    if viewer["role"] == "doctor":
+        allowed = owner_id in get_active_patients_for_doctor(viewer["id"])
+    if not allowed:
+        return jsonify({"error": "Image not found"}), 404
+    response = send_file(BytesIO(scan["image_bytes"]), mimetype=scan["image_mime"])
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 # -------------------------------------------------
@@ -828,8 +965,28 @@ def predict():
     methods=["GET"]
 )
 def assessments():
-    assessment_list = get_assessments()
-
+    # The legacy dataset contains prototype predictions without validated
+    # provenance. Do not expose them as medical screening records.
     return jsonify({
-        "assessments": assessment_list
+        "assessments": [],
+        "notice": "Historical demonstration predictions are hidden until model integration is complete."
     })
+
+
+# Patient chooses to remove a clinician note from their own portal.
+# This is a soft-removal; the original clinical note is preserved.
+@app.route("/api/patients/me/notes/<note_id>", methods=["DELETE"])
+def hide_patient_note_route(note_id):
+    patient = authenticated_user()
+    if patient is None:
+        return jsonify({"error": "Authentication required"}), 401
+    if patient["role"] != "patient":
+        return jsonify({"error": "Patient access required"}), 403
+
+    # A patient must never be able to hide another patient's note.
+    own_notes = get_notes_for_patient(patient["id"])
+    if not any(str(note["id"]) == str(note_id) for note in own_notes):
+        return jsonify({"error": "Note not found"}), 404
+
+    hide_note_for_patient(patient["id"], note_id)
+    return jsonify({"ok": True, "removed_from_view": True})

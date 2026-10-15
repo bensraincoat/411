@@ -108,3 +108,75 @@ def get_appointments_for_user(user_id):
     conn.close()
 
     return [dict(row) for row in rows]
+
+
+# Doctor-only list; caller must derive doctor_id from the authenticated user.
+def get_appointments_for_doctor(doctor_id):
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT * FROM appointments
+            WHERE doctor_id = ?
+            ORDER BY date ASC, time ASC
+            """,
+            (doctor_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def update_appointment_status(appointment_id, doctor_id, new_status):
+    """Change a pending appointment belonging to this doctor only.
+
+    Returns None if the request is missing, already processed, or the chosen
+    slot already has a confirmed appointment for the same doctor.
+    """
+    if new_status not in {"confirmed", "declined"}:
+        raise ValueError("Invalid appointment status")
+
+    conn = get_connection()
+    try:
+        # Serialize changes so two confirmations cannot claim the same slot.
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            """
+            SELECT * FROM appointments
+            WHERE id = ? AND doctor_id = ? AND status = 'requested'
+            """,
+            (appointment_id, doctor_id),
+        ).fetchone()
+        if row is None:
+            conn.rollback()
+            return None
+
+        if new_status == "confirmed":
+            clash = conn.execute(
+                """
+                SELECT 1 FROM appointments
+                WHERE doctor_id = ? AND date = ? AND time = ?
+                  AND status = 'confirmed' AND id != ?
+                LIMIT 1
+                """,
+                (doctor_id, row["date"], row["time"], appointment_id),
+            ).fetchone()
+            if clash is not None:
+                conn.rollback()
+                return None
+
+        cursor = conn.execute(
+            """
+            UPDATE appointments SET status = ?
+            WHERE id = ? AND doctor_id = ? AND status = 'requested'
+            """,
+            (new_status, appointment_id, doctor_id),
+        )
+        if cursor.rowcount != 1:
+            conn.rollback()
+            return None
+        conn.commit()
+    finally:
+        conn.close()
+
+    return get_appointment_by_id(appointment_id)

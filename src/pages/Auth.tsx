@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import "./AuthPolish.css";
 import { Eye, Stethoscope } from "lucide-react";
 import { AppShell } from "../components/AppShell";
 import { Button, Input } from "../components/ui";
@@ -9,7 +11,8 @@ const CONDITIONS = ["Diabetes", "Hypertension", "High cholesterol", "Previous ey
 
 export function Auth() {
   const [register, setRegister] = useState(false);
-  const [role, setRole] = useState<Role>("patient");
+  const [params] = useSearchParams();
+  const [role, setRole] = useState<Role>(params.get("role") === "doctor" ? "doctor" : "patient");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -22,11 +25,24 @@ export function Auth() {
     const num = (k: string) => (str(k) ? Number(str(k)) : undefined);
     setBusy(true); setError(""); setMessage("");
     try {
+      const feet = num("height_feet");
+      const inches = num("height_inches");
+      if (register && role === "patient" && feet === undefined && inches !== undefined) {
+        throw new Error("Please enter feet as well as inches, or leave height blank.");
+      }
+      // Keep metric storage for the existing API, but accept US units in the form.
+      const heightCm = feet === undefined
+        ? undefined
+        : Math.round((feet * 12 + (inches ?? 0)) * 2.54 * 10) / 10;
+      const pounds = num("weight_lbs");
+      const weightKg = pounds === undefined
+        ? undefined
+        : Math.round(pounds * 0.45359237 * 10) / 10;
       const user = register
         ? await registerAccount({
             email: str("email")!, password: str("password")!, role, full_name: str("name")!,
             phone: str("phone"), address: str("address"),
-            height_cm: num("height"), weight_kg: num("weight"),
+            height_cm: heightCm, weight_kg: weightKg,
             conditions: f.getAll("conditions") as string[],
             clinic: str("clinic"), license_number: str("license"),
           })
@@ -61,8 +77,28 @@ export function Auth() {
                   <div className="form-pair"><label>Phone<Input name="phone" type="tel" /></label><label>Address<Input name="address" /></label></div>
                   {role === "patient" ? (
                     <>
-                      <div className="form-pair"><label>Height (cm)<Input name="height" type="number" /></label><label>Weight (kg)<Input name="weight" type="number" /></label></div>
-                      <fieldset className="condition-field"><legend>Health history</legend>{CONDITIONS.map((x) => <label key={x}><input type="checkbox" name="conditions" value={x} />{x}</label>)}</fieldset>
+                      <div className="oi-measurements-title">Measurements <small>(optional)</small></div>
+                      <div className="oi-measurements-grid">
+                        <div className="oi-height-field">
+                          <span className="oi-field-label">Height</span>
+                          <div className="oi-height-pair">
+                            <label>Feet<Input name="height_feet" type="number" min={2} max={8} step={1} placeholder="5" /></label>
+                            <label>Inches<Input name="height_inches" type="number" min={0} max={11} step={1} placeholder="6" /></label>
+                          </div>
+                        </div>
+                        <label className="oi-weight-field"><span className="oi-field-label">Weight (lbs)</span><Input name="weight_lbs" type="number" min={1} max={1000} step="any" placeholder="150" /></label>
+                      </div>
+                      <fieldset className="condition-field oi-health-field">
+                        <legend>Health history</legend>
+                        <div className="oi-health-options">
+                          {CONDITIONS.map((x) => (
+                            <label className="oi-check-option" key={x}>
+                              <input type="checkbox" name="conditions" value={x} />
+                              <span>{x}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </fieldset>
                     </>
                   ) : (
                     <div className="form-pair"><label>Clinic<Input name="clinic" /></label><label>License number<Input name="license" required /></label></div>

@@ -1,0 +1,56 @@
+/* Only RETINA26 test results / XAI. Does not change the openI global theme. */
+.retina26-results-section { width: 100%; min-width: 0; }
+.retina26-results-list { display: grid; grid-template-columns: 1fr; gap: 16px; max-width: 1040px; }
+.retina26-result {
+  display: grid; grid-template-columns: minmax(130px, 185px) minmax(0, 1fr); align-items: start;
+  gap: 18px; border: 1px solid #dfcfc2; border-radius: 12px;
+  background: #fffaf6; padding: 16px; min-width: 0; width: 100%;
+}
+.retina26-result-thumb { width: 100%; aspect-ratio: 1; max-height: 185px;
+  object-fit: contain; background: #0b1114; border-radius: 9px; display: block; }
+.retina26-result-body { min-width: 0; }
+.retina26-result-top { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between; }
+.retina26-result-top h3 { font-size: clamp(1.18rem, 2vw, 1.6rem); margin: 0; line-height: 1.23; }
+.retina26-result-confidence { color: #12695f; font-weight: 650; white-space: nowrap; font-size: .94rem; }
+.retina26-result-file { color: #50606a; font-size: .82rem; overflow-wrap: anywhere; margin: 7px 0 10px; }
+.retina26-result-subline { font-size: .89rem; line-height: 1.45; margin: 0 0 10px; }
+.retina26-result-saved { margin: 0 0 10px; font-size: .88rem; }
+.retina26-prob-details { font-size: .86rem; margin-top: 10px; }
+.retina26-prob-details summary { cursor: pointer; font-weight: 600; }
+.retina26-prob-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px,1fr)); gap: 6px 12px; padding-top: 8px; }
+.retina26-prob-grid span { color: #3c535c; }
+.retina26-xai-wrap { width: 100%; min-width: 0; margin-top: 10px; }
+.retina26-xai-button {
+  display: inline-flex; align-items: center; border-radius: 8px; padding: 9px 13px;
+  background: #fffaf6; color: #10191f; border: 1px solid #d7bca8;
+  font-size: .9rem; font-family: inherit; font-weight: 600; cursor: pointer;
+}
+.retina26-xai-button:hover { border-color: #f15a29; }
+.retina26-xai-button:focus-visible, .retina26-heatmap-details summary:focus-visible { outline: 3px solid #ed8f68; outline-offset: 2px; }
+.retina26-xai-button:disabled { opacity: .62; cursor: wait; }
+.retina26-xai-panel { margin-top: 10px; max-width: 100%; min-width: 0;
+  border: 1px solid #e6d5c6; border-left: 3px solid #f15a29; border-radius: 10px;
+  background: #fffdfb; padding: 15px; color: #18232a; font-size: .89rem; line-height: 1.48; }
+.retina26-xai-panel p { margin: 6px 0; font-size: inherit; line-height: inherit; }
+.retina26-xai-title { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.retina26-xai-title strong { font-size: 1.02rem; }
+.retina26-xai-title span { font-size: .72rem; color: #8a4f32; text-transform: uppercase; letter-spacing: .04em; }
+.retina26-xai-lead { margin-top: 9px !important; }
+.retina26-xai-education { background: #f7f0e8; padding: 10px 12px; border-radius: 8px; margin: 12px 0; }
+.retina26-xai-education p { margin-bottom: 0; }
+.retina26-xai-status { color: #395869; }
+.retina26-xai-error { color: #b3261e; }
+.retina26-heatmap-details { margin-top: 11px; border-top: 1px solid #e6d5c6; padding-top: 9px; }
+.retina26-heatmap-details > summary, .retina26-technical-details > summary { cursor: pointer; font-weight: 650; }
+.retina26-heatmap-layout { display: grid; grid-template-columns: minmax(120px, 190px) minmax(0,1fr); gap: 13px; margin-top: 12px; align-items: start; }
+.retina26-heatmap-layout figure { margin: 0; width: 100%; }
+.retina26-heatmap-layout img { width: 100%; max-height: 190px; aspect-ratio: 1; object-fit: contain; background: #091015; border-radius: 8px; display: block; }
+.retina26-heatmap-layout figcaption { font-size: .76rem; margin-top: 5px; color: #53636a; }
+.retina26-technical-details { margin-top: 8px; font-size: .83rem; }
+.retina26-xai-disclaimer { font-size: .81rem !important; color: #6e4838; margin-top: 13px !important; }
+@media (max-width: 670px) {
+  .retina26-result { grid-template-columns: minmax(0,1fr); padding: 12px; gap: 12px; }
+  .retina26-result-thumb { max-width: 240px; max-height: 190px; }
+  .retina26-heatmap-layout { grid-template-columns: minmax(0,1fr); }
+  .retina26-heatmap-layout img { max-width: 190px; }
+}

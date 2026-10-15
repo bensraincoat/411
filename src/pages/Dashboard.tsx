@@ -1,3 +1,7 @@
+import { removeNoteFromPatientView } from "../api/records";
+import { ResearchScanImage } from "../components/ResearchScanImage";
+import { ResearchScanExplanation } from "../components/ResearchScanExplanation";
+import { PatientGreeting, AppointmentStatusOverview } from "../components/PatientDashboardEnhancements";
 import { useState, type FormEvent } from "react";
 import {
   CalendarPlus,
@@ -37,7 +41,8 @@ export function Dashboard() {
   const [savingDoctorId, setSavingDoctorId] = useState<string | null>(null);
 
   const { data: scans } = useApi(listMyScans, []);
-  const { data: notes } = useApi(listMyNotes, []);
+  const [showAllScans, setShowAllScans] = useState(false);
+  const { data: notes, setData: setNotes } = useApi(listMyNotes, []);
 
   const {
     data: consents,
@@ -50,6 +55,34 @@ export function Dashboard() {
     data: appointments,
     setData: setAppointments,
   } = useApi<Appointment[]>(listAppointments, []);
+
+  const [showAllNotes, setShowAllNotes] = useState(false);
+  const [removingNoteId, setRemovingNoteId] = useState<string | null>(null);
+  const [noteError, setNoteError] = useState("");
+
+  const sortedNotes = [...notes].sort((a, b) =>
+    (b.created_at ?? "").localeCompare(a.created_at ?? "")
+  );
+  const visibleNotes = showAllNotes ? sortedNotes : sortedNotes.slice(0, 1);
+
+  async function removeNoteFromView(noteId: string) {
+    if (!window.confirm(
+      "Remove this note from your patient portal? The original clinical record will be retained."
+    )) return;
+
+    setNoteError("");
+    setRemovingNoteId(noteId);
+    try {
+      await removeNoteFromPatientView(noteId);
+      setNotes((current) => current.filter((entry) => entry.id !== noteId));
+    } catch (err) {
+      setNoteError(errorMessage(err));
+    } finally {
+      setRemovingNoteId(null);
+    }
+  }
+
+
 
 
   // -------------------------------------------------
@@ -85,9 +118,11 @@ export function Dashboard() {
         .toUpperCase()
     : "";
 
-  const upcoming = appointments.find(
-    (appointment) => appointment.status !== "cancelled"
-  );
+  const today = new Date();
+  const localToday = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, "0"), String(today.getDate()).padStart(2, "0")].join("-");
+  const upcoming = [...appointments]
+    .filter((item) => (item.status === "requested" || item.status === "confirmed") && item.date >= localToday)
+    .sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`))[0];
 
 
   // -------------------------------------------------
@@ -186,10 +221,12 @@ export function Dashboard() {
 
         <PageIntro
           eyebrow="Patient portal"
-          title="Good morning, Patient"
+          title={<PatientGreeting />}
           description="Your screening history, care team, and next steps—together in one private workspace."
         />
 
+
+        <AppointmentStatusOverview />
 
         <div className="portal-grid">
 
@@ -206,8 +243,7 @@ export function Dashboard() {
                 </h2>
 
                 <p>
-                  Start a guided review using one of five
-                  documented classification models.
+                  Run RETINA26 research tests on non-identifiable fundus photographs and save experimental results to your history.
                 </p>
               </div>
 
@@ -216,7 +252,7 @@ export function Dashboard() {
                 to="/analyze"
               >
                 <ScanEye />
-                Begin analysis
+                Begin openI scan
               </Link>
             </div>
 
@@ -230,13 +266,12 @@ export function Dashboard() {
                   <h2>Recent retinal images</h2>
                 </div>
 
-                <Button
-                  variant="ghost"
-                  size="sm"
-                >
-                  View all
-                  <ChevronRight />
-                </Button>
+                {scans.length > 3 && (
+                  <Button variant="ghost" size="sm" onClick={() => setShowAllScans((v) => !v)}>
+                    {showAllScans ? "Show recent" : "View all"}
+                    <ChevronRight />
+                  </Button>
+                )}
               </div>
 
 
@@ -249,19 +284,18 @@ export function Dashboard() {
                   </div>
 
                   <h3>
-                    No saved screenings yet
+                    No research screenings saved yet
                   </h3>
 
                   <p>
-                    Your completed image analyses will appear
-                    here with their grade and review status.
+                    Your experimental RETINA26 results will appear here once you run a test. They are not medical diagnoses.
                   </p>
 
                   <Link
                     className="btn btn-outline"
                     to="/analyze"
                   >
-                    Upload first photograph
+                    Begin first openI scan
                   </Link>
 
                 </div>
@@ -270,37 +304,21 @@ export function Dashboard() {
 
                 <div className="patient-list">
 
-                  {scans.map((scan) => (
-
-                    <div
-                      key={scan.id}
-                      className="patient-row"
-                    >
-
-                      <span
-                        className={`grade grade-${scan.grade}`}
-                      >
-                        L{scan.grade}
-                      </span>
-
-                      <span>
-                        <strong>
-                          {scan.label}
-                        </strong>
-
-                        <small>
-                          {scan.model_name}
-                          {" · "}
-                          {new Date(
-                            scan.created_at
-                          ).toLocaleDateString()}
-                          {" · "}
-                          {scan.status}
+                  {(showAllScans ? scans : scans.slice(0, 3)).map((scan) => (
+                    <article key={scan.id} className="patient-row" style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ width: 90, flexShrink: 0 }}>
+                        <ResearchScanImage scanId={scan.id} alt={`Research retinal image ${scan.filename || scan.id}`} />
+                      </div>
+                      <span className={`grade grade-${scan.grade}`}>L{scan.grade}</span>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <strong>{scan.label}</strong>
+                        <small style={{ display: "block" }}>
+                          {scan.model_name} · {new Date(scan.created_at).toLocaleString()} · {(scan.confidence * 100).toFixed(1)}% confidence
                         </small>
-                      </span>
-
-                    </div>
-
+                        <small style={{ display: "block" }}>Experimental research result — not a diagnosis</small>
+                        <ResearchScanExplanation scanId={scan.id} grade={scan.grade} label={scan.label} />
+                      </div>
+                    </article>
                   ))}
 
                 </div>
@@ -312,77 +330,69 @@ export function Dashboard() {
 
             {/* Doctor notes */}
             <div className="panel">
-
               <div className="panel-head">
                 <div>
-                  <span>Doctor’s notes</span>
+                  <span>Doctor's notes</span>
                   <h2>Care guidance</h2>
                 </div>
-
                 <FileText />
               </div>
 
+              <p className="muted-copy" style={{ marginTop: 12 }}>
+                Recent guidance appears first. You can remove individual notes from
+                your portal without altering the clinician's original record.
+              </p>
+              {noteError && <p className="form-error" role="alert">{noteError}</p>}
 
               {notes.length === 0 ? (
-
                 <div className="note-placeholder">
-
                   <ShieldCheck />
-
                   <div>
-                    <strong>
-                      Notes stay private
-                    </strong>
-
-                    <p>
-                      When your selected ophthalmologist
-                      reviews a result, their explanation,
-                      preventive guidance, and follow-up
-                      advice will appear here.
-                    </p>
+                    <strong>No notes in your portal</strong>
+                    <p>Notes shared by your clinician will appear here.</p>
                   </div>
-
                 </div>
-
               ) : (
-
-                notes.map((note) => (
-
-                  <div
-                    key={note.id}
-                    className="note-placeholder"
-                  >
-
-                    <FileText />
-
-                    <div>
-
-                      <strong>
-                        {note.doctor_name ??
-                          "Your ophthalmologist"}
-                      </strong>
-
-                      <p>
-                        {note.note}
-                      </p>
-
-                      {note.follow_up && (
-                        <p>
-                          <b>Next step:</b>{" "}
-                          {note.follow_up}
-                        </p>
-                      )}
-
-                    </div>
-
-                  </div>
-
-                ))
-
+                <>
+                  {visibleNotes.map((note) => (
+                    <article key={note.id} className="note-placeholder" style={{ alignItems: "flex-start" }}>
+                      <FileText />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                          <strong>{note.doctor_name ?? "Your clinician"}</strong>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={removingNoteId === note.id}
+                            onClick={() => removeNoteFromView(note.id)}
+                          >
+                            {removingNoteId === note.id ? "Removing..." : "Remove note"}
+                          </Button>
+                        </div>
+                        {note.created_at && (
+                          <small style={{ display: "block", marginTop: 3, color: "var(--muted-foreground)" }}>
+                            {new Date(note.created_at).toLocaleString()}
+                          </small>
+                        )}
+                        <p>{note.note}</p>
+                        {note.follow_up && <p><b>Next step:</b> {note.follow_up}</p>}
+                      </div>
+                    </article>
+                  ))}
+                  {notes.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAllNotes((value) => !value)}
+                    >
+                      {showAllNotes ? "Show latest note" : `Show all notes (${notes.length})`}
+                    </Button>
+                  )}
+                </>
               )}
-
             </div>
-
           </section>
 
 
@@ -783,7 +793,8 @@ export function Dashboard() {
                   <Input
                     name="date"
                     type="date"
-                    defaultValue="2026-10-08"
+                    min={localToday}
+                    required
                   />
                 </label>
 
