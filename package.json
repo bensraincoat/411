@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "api": "cd api && venv\\Scripts\\flask.exe run --no-debugger"
+    "api": "cd api && venv\\Scripts\\flask.exe run --no-debugger",
+    "api:retina": "cd api && set RETINA26_RESEARCH_MODE=1&& \"%LOCALAPPDATA%\\openI\\retina26-venv\\Scripts\\python.exe\" -m flask --app api run --no-debugger"
   },
   "dependencies": {
     "lucide-react": "^0.575.0",

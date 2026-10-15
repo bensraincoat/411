@@ -63,15 +63,15 @@ export function Home() {
 
               <div className="hero-actions">
                 <Link className="btn btn-lg" to="/analyze">
-                  Start an analysis
+                  Explore screening
                   <ArrowRight />
                 </Link>
 
-                <Link
-                  className="btn btn-outline btn-lg"
-                  to="/auth"
-                >
-                  Create patient account
+                <Link className="btn btn-outline btn-lg" to="/auth?role=patient">
+                  Patient portal
+                </Link>
+                <Link className="btn btn-outline btn-lg" to="/auth?role=doctor">
+                  Clinician workspace
                 </Link>
               </div>
             </div>
@@ -182,7 +182,7 @@ export function Home() {
           </div>
 
           <Link className="btn btn-lg" to="/analyze">
-            Analyze photographs
+            Explore screening workspace
             <ArrowRight />
           </Link>
         </section>

@@ -38,3 +38,17 @@
 .demo-message { margin-top:14px; color:var(--teal); font-size:13px; line-height:1.5; }
 
 .min-h-screen { min-height:100vh; }
+
+/* openI-portal-polish-v1: retain original palette and responsive header. */
+.site-nav .openi-portal-shortcut {
+  white-space: nowrap;
+  color: var(--primary-foreground);
+}
+.site-nav .openi-portal-shortcut:hover {
+  background: color-mix(in oklab, var(--primary) 18%, transparent);
+}
+@media (max-width: 620px) {
+  .site-nav .openi-portal-shortcut { padding-inline: 8px; }
+  .site-nav .openi-portal-shortcut span { display: none; }
+  .site-nav .openi-portal-shortcut svg { width: 16px; height: 16px; }
+}

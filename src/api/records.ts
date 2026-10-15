@@ -23,9 +23,25 @@ export const requestAppointment = (payload: AppointmentRequest) =>
     body: payload
   });
 
+// Doctor-only: accept or decline an assigned appointment.
+export const updateAppointmentStatus = (
+  appointmentId: string,
+  status: "confirmed" | "declined"
+) =>
+  apiRequest<Appointment>(
+    `/api/appointments/${encodeURIComponent(appointmentId)}/status`,
+    {
+      method: "PATCH",
+      body: { status }
+    }
+  );
+
 // ---------- Patient history ----------
 export const listMyScans = () =>
   apiRequest<Scan[]>("/api/patients/me/scans");
+
+export const listPatientResearchScans = (patientId: string) =>
+  apiRequest<Scan[]>(`/api/doctor/patients/${encodeURIComponent(patientId)}/scans`);
 
 export const listMyNotes = () =>
   apiRequest<DoctorNote[]>("/api/patients/me/notes");
@@ -76,4 +92,11 @@ export const saveDoctorNote = (
         scan_id: scanId
       }
     }
+  );
+
+// Patient-only: remove a doctor note from the patient portal (original is retained).
+export const removeNoteFromPatientView = (noteId: string) =>
+  apiRequest<{ ok: boolean; removed_from_view: boolean }>(
+    `/api/patients/me/notes/${encodeURIComponent(noteId)}`,
+    { method: "DELETE" }
   );
