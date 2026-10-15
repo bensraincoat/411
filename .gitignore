@@ -44,3 +44,4 @@ api/consents.db# RETINA26 model weights
 # Python generated files
 __pycache__/
 *.pyc
+*.tsbuildinfo
