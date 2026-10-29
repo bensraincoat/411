@@ -88,7 +88,7 @@ export function Dashboard() {
     : "";
 
   const upcoming = appointments.find(
-    (appointment) => appointment.status !== "cancelled"
+    (appointment) => appointment.status === "confirmed" || appointment.status === "requested"
   );
 
 
@@ -554,6 +554,31 @@ export function Dashboard() {
                 Book appointment
               </Button>
 
+            </div>
+
+            <div className="panel">
+              <div className="panel-head">
+                <div>
+                  <span>Appointments</span>
+                  <h2>Appointment history</h2>
+                </div>
+              </div>
+
+              {appointments.length === 0 ? (
+                <p>No appointment history yet.</p>
+              ) : (
+                appointments.map((appointment) => (
+                  <div key={appointment.id} className="patient-row">
+                    <div>
+                      <strong>
+                        {appointment.date} at {appointment.time}
+                      </strong>
+                      <p>Reason: {appointment.reason || "Not provided"}</p>
+                      <small>Status: {appointment.status}</small>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
 
           </aside>

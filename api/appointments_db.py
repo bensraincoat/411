@@ -124,3 +124,41 @@ def get_appointments_for_doctor(doctor_id):
     conn.close()
 
     return [dict(row) for row in rows]
+
+def update_appointment_status(appointment_id, doctor_id, status):
+    if status not in ("confirmed", "declined"):
+        return False
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+
+    cursor.execute("""
+        UPDATE appointments
+        SET status = ?
+        WHERE id = ? AND doctor_id = ? AND status = 'requested'
+        """, (status, appointment_id, doctor_id))
+
+    updated = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+
+    return updated
+
+def reschedule_appointment(appointment_id, doctor_id, new_date, new_time):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        UPDATE appointments
+        SET date = ?, time = ?, status = 'confirmed'
+        WHERE id = ?
+            AND doctor_id = ?
+            AND status = 'requested'
+    """, (new_date, new_time, appointment_id, doctor_id))
+
+    updated = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+
+    return updated

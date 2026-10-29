@@ -16,6 +16,8 @@ import {
   errorMessage,
   getDoctorStats,
   listAppointments,
+  updateAppointmentStatus,
+  rescheduleAppointment,
   listSharedPatients,
   saveDoctorNote,
   type Appointment,
@@ -36,6 +38,7 @@ const initialsOf = (patient: Patient) =>
 
 
 export function Doctor() {
+  const [reschedulingId, setReschedulingId] = useState<string | null>(null);
   // Real backend data only.
   const { data: patients } = useApi(
     listSharedPatients,
@@ -50,12 +53,55 @@ export function Doctor() {
       todays_visits: 0,
     }
   );
-  
-  const { data: appointments } = useApi<Appointment[]>(
+
+  const { data: appointments, setData: setAppointments } = useApi<Appointment[]>(
     listAppointments,
     []
   );
 
+  const handleAppointmentStatus = async (
+    appointmentId: string,
+    status: "confirmed" | "declined"
+  ) => {
+    try {
+      await updateAppointmentStatus(appointmentId, status);
+
+      setAppointments((current) =>
+        current.map((appointment) =>
+          appointment.id === appointmentId
+            ? { ...appointment, status }
+            : appointment
+        )
+      );
+    } catch (err) {
+      alert(errorMessage(err));
+    }
+  };
+
+  const handleReschedule = async (
+    appointmentId: string,
+    newDate: string,
+    newTime: string
+  ) => {
+    try {
+      await rescheduleAppointment(appointmentId, newDate, newTime);
+
+      setAppointments((current) =>
+        current.map((appointment) =>
+          appointment.id === appointmentId
+            ? {
+              ...appointment,
+              date: newDate,
+              time: newTime,
+              status: "confirmed"
+            }
+            : appointment
+        )
+      );
+    } catch (err) {
+      alert(errorMessage(err));
+    }
+  };
 
   const [selectedId, setSelectedId] =
     useState<string>();
@@ -522,10 +568,80 @@ export function Doctor() {
                   <p>Reason: {appointment.reason || "Not provided"}</p>
                   <small>Status: {appointment.status}</small>
                 </div>
+                {appointment.status === "requested" && (
+                  <div>
+                    <Button
+                      onClick={() =>
+                        handleAppointmentStatus(appointment.id, "confirmed")
+                      }
+                    >
+                      Accept
+                    </Button>
+
+                    <Button
+                      onClick={() =>
+                        handleAppointmentStatus(appointment.id, "declined")
+                      }
+                    >
+                      Decline
+                    </Button>
+
+                    <Button onClick={() => setReschedulingId(appointment.id)}
+                    >
+                      Reschedule
+                    </Button>
+
+                    {reschedulingId === appointment.id && (
+                      <div>
+                        <input
+                          type="date"
+                          id={`date-${appointment.id}`}
+                          defaultValue={appointment.date}
+                        />
+
+                        <input
+                          type="time"
+                          id={`time-${appointment.id}`}
+                          defaultValue={appointment.time}
+                        />
+
+                        <Button
+                          onClick={() => {
+                            const dateInput = document.getElementById(
+                              `date-${appointment.id}`
+                            ) as HTMLInputElement | null;
+
+                            const timeInput = document.getElementById(
+                              `time-${appointment.id}`
+                            ) as HTMLInputElement | null;
+
+                            if (!dateInput?.value || !timeInput?.value) {
+                              alert("Please select a date and time.");
+                              return;
+                            }
+
+                            void handleReschedule(
+                              appointment.id,
+                              dateInput.value,
+                              timeInput.value
+                            );
+                            setReschedulingId(null);
+                          }}
+                        >
+                          Save changes
+                        </Button>
+
+                        <Button onClick={() => setReschedulingId(null)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))
           )}
-        </section>  
+          </section>
         <p className="privacy-line">
           Patient access is consent-based. Records
           disappear from this workspace when consent

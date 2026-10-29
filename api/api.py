@@ -29,6 +29,8 @@ from appointments_db import (
     create_appointment,
     get_appointments_for_user,
     get_appointments_for_doctor,
+    update_appointment_status,
+    reschedule_appointment,
 )
 
 from doctor_notes_db import (
@@ -305,7 +307,7 @@ def doctors():
             "id": doctor["id"],
             "name": doctor["full_name"],
             "specialty": "Ophthalmologist",
-            "clinic": doctor["clinic"] or "Clinic not provided", 
+            "clinic": doctor["clinic"] or "Clinic not provided",
         })
 
     return jsonify(results)
@@ -352,7 +354,7 @@ def create_appointment_route():
         }), 400
 
     doctor = get_user_by_id(doctor_id)
-        
+
 
     if doctor is None or doctor["role"] != "doctor":
         return jsonify({
@@ -379,7 +381,7 @@ def list_appointments_route():
         return jsonify({
             "error": "Authentication required"
         }), 401
-    
+
     if user["role"] == "doctor":
         appointments = get_appointments_for_doctor(user["id"])
     else:
@@ -391,6 +393,69 @@ def list_appointments_route():
 
     return jsonify(appointments)
 
+@app.route("/api/appointments/<appointment_id>/status", methods=["PATCH"])
+def update_appointment_status_route(appointment_id):
+    user = authenticated_user()
+
+    if user is None:
+        return jsonify({"error": "Authentication required"}), 401
+
+    if user["role"] != "doctor":
+        return jsonify({"error": "Doctor access required"}), 403
+
+    data = request.get_json(silent=True) or {}
+    status = data.get("status")
+
+    if status not in ("confirmed", "declined"):
+        return jsonify({"error": "Invalid appointment status"}), 400
+
+    updated = update_appointment_status(
+        appointment_id,
+        user["id"],
+        status
+    )
+
+    if not updated:
+        return jsonify({"error": "Appointment not found or already processed"}), 404
+
+    return jsonify({"message": "Appointment updated", "status": status})
+
+@app.route("/api/appointments/<appointment_id>/reschedule", methods=["PATCH"])
+def reschedule_appointment_route(appointment_id):
+    user = authenticated_user()
+
+    if user is None:
+        return jsonify({"error": "Authentication required"}), 401
+
+    if user["role"] != "doctor":
+        return jsonify({"error": "Doctor access required"}), 403
+
+    data = request.get_json(silent=True) or {}
+    new_date = data.get("date")
+    new_time = data.get("time")
+
+    if not isinstance(new_date, str) or not isinstance(new_time, str):
+        return jsonify({"error": "Date and time are required"}), 400
+
+    if not new_date.strip() or not new_time.strip():
+        return jsonify({"error": "Date and time are required"}), 400
+
+    updated = reschedule_appointment(
+        appointment_id,
+        user["id"],
+        new_date,
+        new_time
+    )
+
+    if not updated:
+        return jsonify({"error": "Appointment not found or already processed"}), 404
+
+    return jsonify({
+        "message": "Appointment rescheduled",
+        "date": new_date,
+        "time": new_time,
+        "status": "confirmed"
+    })
 
 # -------------------------------------------------
 # Doctor portal

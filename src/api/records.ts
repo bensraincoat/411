@@ -23,6 +23,37 @@ export const requestAppointment = (payload: AppointmentRequest) =>
     body: payload
   });
 
+export const updateAppointmentStatus = (
+  appointmentId: string,
+  status: "confirmed" | "declined"
+) =>
+  apiRequest<{ message: string; status: string }>(
+    `/api/appointments/${appointmentId}/status`,
+    {
+      method: "PATCH",
+      body: { status }
+    }
+  );
+
+export const rescheduleAppointment = (
+  appointmentId: string,
+  date: string,
+  time: string
+) =>
+  apiRequest<{
+    message: string;
+    date: string;
+    time: string;
+    status: string;
+  }>(
+    `/api/appointments/${appointmentId}/reschedule`,
+    {
+      method: "PATCH",
+      body: { date, time }
+    }
+  );
+
+
 // ---------- Patient history ----------
 export const listMyScans = () =>
   apiRequest<Scan[]>("/api/patients/me/scans");
