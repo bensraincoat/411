@@ -1,19 +1,11 @@
 import { removeNoteFromPatientView } from "../api/records";
 import { ResearchScanImage } from "../components/ResearchScanImage";
 import { ResearchScanExplanation } from "../components/ResearchScanExplanation";
-import { PatientGreeting, AppointmentStatusOverview } from "../components/PatientDashboardEnhancements";
+import { PatientGreeting } from "../components/PatientDashboardEnhancements";
 import { useState, type FormEvent } from "react";
-import {
-  CalendarPlus,
-  ChevronRight,
-  Clock3,
-  FileText,
-  ScanEye,
-  ShieldCheck,
-  UserRound,
-} from "lucide-react";
+import { CalendarPlus, ScanEye } from "lucide-react";
 
-import { AppShell, PageIntro } from "../components/AppShell";
+import { AppShell } from "../components/AppShell";
 import { Button, Input } from "../components/ui";
 import { Link } from "../router";
 
@@ -32,6 +24,20 @@ import {
 import { useApi } from "../hooks/useApi";
 
 
+const appointmentStatusLabel: Record<Appointment["status"], string> = {
+  requested: "Pending",
+  confirmed: "Confirmed",
+  declined: "Declined",
+  cancelled: "Cancelled",
+};
+
+function formatAppointmentDay(date: string) {
+  const day = new Date(`${date}T12:00:00`);
+  return Number.isNaN(day.getTime())
+    ? date
+    : day.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
 export function Dashboard() {
   const [booking, setBooking] = useState(false);
   const [bookError, setBookError] = useState("");
@@ -42,6 +48,14 @@ export function Dashboard() {
 
   const { data: scans } = useApi(listMyScans, []);
   const [showAllScans, setShowAllScans] = useState(false);
+  const [selectedScanId, setSelectedScanId] = useState<string | null>(null);
+
+  // Newest first; the featured card shows the latest unless the patient picks another.
+  const sortedScans = [...scans].sort((a, b) =>
+    (b.created_at ?? "").localeCompare(a.created_at ?? "")
+  );
+  const featuredScan =
+    sortedScans.find((scan) => scan.id === selectedScanId) ?? sortedScans[0];
   const { data: notes, setData: setNotes } = useApi(listMyNotes, []);
 
   const {
@@ -123,6 +137,16 @@ export function Dashboard() {
   const upcoming = [...appointments]
     .filter((item) => (item.status === "requested" || item.status === "confirmed") && item.date >= localToday)
     .sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`))[0];
+
+  // With nothing upcoming, still surface a request the clinic declined or cancelled.
+  const mostRecentRequest = [...appointments].sort((a, b) =>
+    (b.created_at ?? "").localeCompare(a.created_at ?? "")
+  )[0];
+  const nextAppointment =
+    upcoming ??
+    (mostRecentRequest && (mostRecentRequest.status === "declined" || mostRecentRequest.status === "cancelled")
+      ? mostRecentRequest
+      : undefined);
 
 
   // -------------------------------------------------
@@ -217,425 +241,240 @@ export function Dashboard() {
 
   return (
     <AppShell>
-      <main className="portal-shell">
+      <main className="portal-shell dash">
 
-        <PageIntro
-          eyebrow="Patient portal"
-          title={<PatientGreeting />}
-          description="Your screening history, care team, and next steps—together in one private workspace."
-        />
+        <header className="dash-head">
+          <div>
+            <span className="dash-role">Patient portal</span>
+            <h1><PatientGreeting /></h1>
+          </div>
 
+          <Link className="btn btn-lg" to="/analyze">
+            <ScanEye />
+            New screening
+          </Link>
+        </header>
 
-        <AppointmentStatusOverview />
+        <div className="dash-grid">
 
-        <div className="portal-grid">
+          {/* ---------- MAIN: latest result, then history ---------- */}
+          <section className="dash-main">
 
-          {/* LEFT SIDE */}
-          <section className="portal-main">
+            <article className="panel feature-card" aria-label="Screening result">
+              {!featuredScan ? (
+                <div className="empty-history">
+                  <div className="mini-retina">
+                    <ScanEye />
+                  </div>
+                  <h2>No screenings yet</h2>
+                  <p>Upload a retinal photograph and your result will show up here.</p>
+                  <Link className="btn" to="/analyze">Start your first screening</Link>
+                </div>
+              ) : (
+                <>
+                  <div className="feature-meta">
+                    <span className="card-label">
+                      {featuredScan.id === sortedScans[0].id ? "Latest result" : "Selected result"}
+                    </span>
+                    <span>{new Date(featuredScan.created_at).toLocaleString()}</span>
+                  </div>
 
-            {/* New screening */}
-            <div className="quick-action">
-              <div>
-                <span>New screening</span>
+                  <div className="feature-body">
+                    <ResearchScanImage
+                      scanId={featuredScan.id}
+                      alt={`Retinal image ${featuredScan.filename || featuredScan.id}`}
+                      className="feature-image"
+                    />
 
-                <h2>
-                  Upload retinal photographs
-                </h2>
+                    <div className="feature-info">
+                      <span className={`grade grade-${featuredScan.grade}`}>
+                        Level {featuredScan.grade}
+                      </span>
+                      <h2>{featuredScan.label}</h2>
+                      <p className="feature-confidence">
+                        {(featuredScan.confidence * 100).toFixed(1)}% model confidence
+                      </p>
 
-                <p>
-                  Run RETINA26 research tests on non-identifiable fundus photographs and save experimental results to your history.
-                </p>
-              </div>
+                      <ResearchScanExplanation
+                        scanId={featuredScan.id}
+                        grade={featuredScan.grade}
+                        label={featuredScan.label}
+                      />
 
-              <Link
-                className="btn"
-                to="/analyze"
-              >
-                <ScanEye />
-                Begin openI scan
-              </Link>
-            </div>
+                      <p className="feature-disclaimer">
+                        Experimental research result. Not a diagnosis.
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
+            </article>
 
-
-            {/* Screening history */}
-            <div className="panel">
-
-              <div className="panel-head">
-                <div>
-                  <span>Screening history</span>
-                  <h2>Recent retinal images</h2>
+            {sortedScans.length > 1 && (
+              <article className="panel">
+                <div className="panel-head">
+                  <h2 className="card-title">History</h2>
+                  {sortedScans.length > 4 && (
+                    <Button variant="ghost" size="sm" onClick={() => setShowAllScans((v) => !v)}>
+                      {showAllScans ? "Show fewer" : `View all (${sortedScans.length})`}
+                    </Button>
+                  )}
                 </div>
 
-                {scans.length > 3 && (
-                  <Button variant="ghost" size="sm" onClick={() => setShowAllScans((v) => !v)}>
-                    {showAllScans ? "Show recent" : "View all"}
-                    <ChevronRight />
+                <div className="history-list">
+                  {(showAllScans ? sortedScans : sortedScans.slice(0, 4)).map((scan) => (
+                    <button
+                      key={scan.id}
+                      type="button"
+                      className={`history-row${scan.id === featuredScan?.id ? " is-active" : ""}`}
+                      onClick={() => setSelectedScanId(scan.id)}
+                      aria-pressed={scan.id === featuredScan?.id}
+                    >
+                      <ResearchScanImage
+                        scanId={scan.id}
+                        alt=""
+                        className="history-thumb"
+                      />
+                      <span className="history-text">
+                        <strong>{scan.label}</strong>
+                        <small>{new Date(scan.created_at).toLocaleDateString()}</small>
+                      </span>
+                      <span className={`grade grade-${scan.grade}`}>L{scan.grade}</span>
+                    </button>
+                  ))}
+                </div>
+              </article>
+            )}
+          </section>
+
+
+          {/* ---------- SIDE: appointment, care team, notes ---------- */}
+          <aside className="dash-side">
+
+            <article className="panel">
+              <h2 className="card-title">Next appointment</h2>
+
+              {nextAppointment ? (
+                <div className="side-block">
+                  <div className="side-row">
+                    <strong>{nextAppointment.doctor_name || "Your ophthalmologist"}</strong>
+                    <span className={`status-pill is-${nextAppointment.status}`}>
+                      {appointmentStatusLabel[nextAppointment.status]}
+                    </span>
+                  </div>
+                  <span className="side-muted">
+                    {formatAppointmentDay(nextAppointment.date)} at {nextAppointment.time}
+                  </span>
+                </div>
+              ) : (
+                <p className="side-muted side-block">Nothing scheduled.</p>
+              )}
+
+              <Button variant="outline" className="w-full" onClick={() => setBooking(true)}>
+                <CalendarPlus />
+                Book appointment
+              </Button>
+            </article>
+
+
+            <article className="panel">
+              <div className="panel-head">
+                <h2 className="card-title">Care team</h2>
+                <Button variant="ghost" size="sm" onClick={() => setClinicianPicker(true)}>
+                  {careDoctorName ? "Change" : "Choose"}
+                </Button>
+              </div>
+
+              {careDoctorName ? (
+                <div className="doctor-profile">
+                  <div className="doctor-avatar">{initials}</div>
+                  <div>
+                    <strong>{careDoctorName}</strong>
+                    <span>{careDoctorDetails}</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="side-muted side-block">
+                  Choose an ophthalmologist to share your results with.
+                </p>
+              )}
+            </article>
+
+
+            <article className="panel">
+              <div className="panel-head">
+                <h2 className="card-title">Doctor's notes</h2>
+                {notes.length > 1 && (
+                  <Button variant="ghost" size="sm" onClick={() => setShowAllNotes((value) => !value)}>
+                    {showAllNotes ? "Latest only" : `All (${notes.length})`}
                   </Button>
                 )}
               </div>
 
-
-              {scans.length === 0 ? (
-
-                <div className="empty-history">
-
-                  <div className="mini-retina">
-                    <ScanEye />
-                  </div>
-
-                  <h3>
-                    No research screenings saved yet
-                  </h3>
-
-                  <p>
-                    Your experimental RETINA26 results will appear here once you run a test. They are not medical diagnoses.
-                  </p>
-
-                  <Link
-                    className="btn btn-outline"
-                    to="/analyze"
-                  >
-                    Begin first openI scan
-                  </Link>
-
-                </div>
-
-              ) : (
-
-                <div className="patient-list">
-
-                  {(showAllScans ? scans : scans.slice(0, 3)).map((scan) => (
-                    <article key={scan.id} className="patient-row" style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                      <div style={{ width: 90, flexShrink: 0 }}>
-                        <ResearchScanImage scanId={scan.id} alt={`Research retinal image ${scan.filename || scan.id}`} />
-                      </div>
-                      <span className={`grade grade-${scan.grade}`}>L{scan.grade}</span>
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <strong>{scan.label}</strong>
-                        <small style={{ display: "block" }}>
-                          {scan.model_name} · {new Date(scan.created_at).toLocaleString()} · {(scan.confidence * 100).toFixed(1)}% confidence
-                        </small>
-                        <small style={{ display: "block" }}>Experimental research result — not a diagnosis</small>
-                        <ResearchScanExplanation scanId={scan.id} grade={scan.grade} label={scan.label} />
-                      </div>
-                    </article>
-                  ))}
-
-                </div>
-
-              )}
-
-            </div>
-
-
-            {/* Doctor notes */}
-            <div className="panel">
-              <div className="panel-head">
-                <div>
-                  <span>Doctor's notes</span>
-                  <h2>Care guidance</h2>
-                </div>
-                <FileText />
-              </div>
-
-              <p className="muted-copy" style={{ marginTop: 12 }}>
-                Recent guidance appears first. You can remove individual notes from
-                your portal without altering the clinician's original record.
-              </p>
               {noteError && <p className="form-error" role="alert">{noteError}</p>}
 
               {notes.length === 0 ? (
-                <div className="note-placeholder">
-                  <ShieldCheck />
-                  <div>
-                    <strong>No notes in your portal</strong>
-                    <p>Notes shared by your clinician will appear here.</p>
-                  </div>
-                </div>
+                <p className="side-muted side-block">No notes yet.</p>
               ) : (
-                <>
-                  {visibleNotes.map((note) => (
-                    <article key={note.id} className="note-placeholder" style={{ alignItems: "flex-start" }}>
-                      <FileText />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                          <strong>{note.doctor_name ?? "Your clinician"}</strong>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={removingNoteId === note.id}
-                            onClick={() => removeNoteFromView(note.id)}
-                          >
-                            {removingNoteId === note.id ? "Removing..." : "Remove note"}
-                          </Button>
-                        </div>
-                        {note.created_at && (
-                          <small style={{ display: "block", marginTop: 3, color: "var(--muted-foreground)" }}>
-                            {new Date(note.created_at).toLocaleString()}
-                          </small>
-                        )}
-                        <p>{note.note}</p>
-                        {note.follow_up && <p><b>Next step:</b> {note.follow_up}</p>}
-                      </div>
-                    </article>
-                  ))}
-                  {notes.length > 1 && (
+                visibleNotes.map((note) => (
+                  <div key={note.id} className="note-item">
+                    <div className="side-row">
+                      <strong>{note.doctor_name ?? "Your clinician"}</strong>
+                      {note.created_at && (
+                        <span className="side-muted">{new Date(note.created_at).toLocaleDateString()}</span>
+                      )}
+                    </div>
+                    <p>{note.note}</p>
+                    {note.follow_up && <p><b>Next step:</b> {note.follow_up}</p>}
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
-                      onClick={() => setShowAllNotes((value) => !value)}
+                      disabled={removingNoteId === note.id}
+                      onClick={() => removeNoteFromView(note.id)}
                     >
-                      {showAllNotes ? "Show latest note" : `Show all notes (${notes.length})`}
+                      {removingNoteId === note.id ? "Removing..." : "Remove from my portal"}
                     </Button>
-                  )}
-                </>
-              )}
-            </div>
-          </section>
-
-
-          {/* RIGHT SIDE */}
-          <aside className="portal-side">
-
-            {/* Care team */}
-            <div className="panel">
-
-              <div className="panel-head">
-
-                <div>
-                  <span>Care team</span>
-                  <h2>Your ophthalmologist</h2>
-                </div>
-
-                <UserRound />
-
-              </div>
-
-
-              {careDoctorName ? (
-
-                <>
-                  <div className="doctor-profile">
-
-                    <div className="doctor-avatar">
-                      {initials}
-                    </div>
-
-                    <div>
-
-                      <strong>
-                        {careDoctorName}
-                      </strong>
-
-                      <span>
-                        {careDoctorDetails}
-                      </span>
-
-                    </div>
-
                   </div>
-
-
-                  <div className="consent-state">
-
-                    <ShieldCheck />
-
-                    <span>
-                      You control this clinician’s access
-                      to your records.
-                    </span>
-
-                  </div>
-
-
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() =>
-                      setClinicianPicker(true)
-                    }
-                  >
-                    Change clinician
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={removeClinician}
-                  >
-                    Remove clinician
-                  </Button>
-
-                </>
-
-              ) : (
-
-                <>
-                  <div className="note-placeholder">
-
-                    <UserRound />
-
-                    <div>
-
-                      <strong>
-                        No ophthalmologist selected
-                      </strong>
-
-                      <p>
-                        Choose a clinician to share your
-                        screening records and receive care
-                        guidance.
-                      </p>
-
-                    </div>
-
-                  </div>
-
-
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() =>
-                      setClinicianPicker(true)
-                    }
-                  >
-                    Choose clinician
-                  </Button>
-                </>
-
+                ))
               )}
-
-            </div>
-
-
-            {/* Appointments */}
-            <div className="panel">
-
-              <div className="panel-head">
-
-                <div>
-                  <span>Appointments</span>
-                  <h2>Upcoming care</h2>
-                </div>
-
-                <Clock3 />
-
-              </div>
-
-
-              {upcoming ? (
-
-                <div className="appointment-confirmed">
-
-                  <strong>
-                    Consultation {upcoming.status}
-                  </strong>
-
-                  <span>
-                    {upcoming.date} · {upcoming.time}
-                  </span>
-
-                  <small>
-                    {upcoming.status === "confirmed"
-                      ? "Confirmed by the clinic"
-                      : "Awaiting clinician confirmation"}
-                  </small>
-
-                </div>
-
-              ) : (
-
-                <p className="muted-copy">
-                  No upcoming appointments.
-                </p>
-
-              )}
-
-
-              <Button
-                className="w-full"
-                onClick={() => setBooking(true)}
-              >
-                <CalendarPlus />
-                Book appointment
-              </Button>
-
-            </div>
+            </article>
 
           </aside>
 
         </div>
 
 
-        {/* -------------------------------------------------
-            CHOOSE CLINICIAN MODAL
-        ------------------------------------------------- */}
-
+        {/* ---------- CHOOSE CLINICIAN MODAL ---------- */}
         {clinicianPicker && (
-
           <div className="modal-backdrop">
-
             <div
               className="booking-modal"
               role="dialog"
               aria-modal="true"
               aria-labelledby="clinician-title"
             >
-
               <button
                 type="button"
                 className="modal-close"
-                onClick={() =>
-                  setClinicianPicker(false)
-                }
+                onClick={() => setClinicianPicker(false)}
                 aria-label="Close"
               >
                 ×
               </button>
 
-
-              <span>
-                Care team
-              </span>
-
-              <h2 id="clinician-title">
-                Choose your ophthalmologist
-              </h2>
+              <h2 id="clinician-title">Choose your ophthalmologist</h2>
 
               <p className="muted-copy">
-                Selecting a clinician allows them to review
-                your screening information and provide care
-                guidance.
+                They can review your screening results and leave care guidance.
+                You control this access and can remove it at any time.
               </p>
 
-
               {doctors.length === 0 ? (
-
-                <div className="note-placeholder">
-
-                  <UserRound />
-
-                  <div>
-                    <strong>
-                      No clinicians available
-                    </strong>
-
-                    <p>
-                      No registered ophthalmologists are
-                      currently available.
-                    </p>
-                  </div>
-
-                </div>
-
+                <p className="side-muted">No registered ophthalmologists are available yet.</p>
               ) : (
-
-                <div className="patient-list">
-
+                <div className="history-list">
                   {doctors.map((doctor) => {
-
                     const doctorInitials = doctor.name
                       .replace(/^Dr\.\s*/i, "")
                       .split(" ")
@@ -644,97 +483,47 @@ export function Dashboard() {
                       .slice(0, 2)
                       .toUpperCase();
 
-                    const isCurrent =
-                      activeConsent?.doctor_id === doctor.id;
+                    const isCurrent = activeConsent?.doctor_id === doctor.id;
 
                     return (
+                      <div key={doctor.id} className="history-row">
+                        <div className="doctor-avatar">{doctorInitials}</div>
 
-                      <div
-                        key={doctor.id}
-                        className="patient-row"
-                      >
-
-                        <div className="doctor-avatar">
-                          {doctorInitials}
-                        </div>
-
-
-                        <span>
-
-                          <strong>
-                            {doctor.name}
-                          </strong>
-
-                          <small>
-                            {doctor.specialty}
-                            {" · "}
-                            {doctor.clinic}
-                          </small>
-
+                        <span className="history-text">
+                          <strong>{doctor.name}</strong>
+                          <small>{doctor.specialty} · {doctor.clinic}</small>
                         </span>
-
 
                         <Button
                           type="button"
                           size="sm"
-                          variant={
-                            isCurrent
-                              ? "outline"
-                              : "default"
-                          }
-                          disabled={
-                            isCurrent ||
-                            savingDoctorId === doctor.id
-                          }
-                          onClick={() =>
-                            chooseClinician(doctor.id)
-                          }
+                          variant={isCurrent ? "outline" : "default"}
+                          disabled={isCurrent || savingDoctorId === doctor.id}
+                          onClick={() => chooseClinician(doctor.id)}
                         >
-
-                          {isCurrent
-                            ? "Selected"
-                            : savingDoctorId === doctor.id
-                            ? "Saving..."
-                            : "Select"}
-
+                          {isCurrent ? "Selected" : savingDoctorId === doctor.id ? "Saving..." : "Select"}
                         </Button>
-
                       </div>
-
                     );
                   })}
-
                 </div>
-
               )}
 
+              {clinicianError && <p className="form-error" role="alert">{clinicianError}</p>}
 
-              {clinicianError && (
-
-                <p
-                  className="form-error"
-                  role="alert"
-                >
-                  {clinicianError}
-                </p>
-
+              {activeConsent && (
+                <Button type="button" variant="ghost" className="danger-link" onClick={removeClinician}>
+                  Remove my current clinician
+                </Button>
               )}
-
             </div>
-
           </div>
-
         )}
 
 
-        {/* -------------------------------------------------
-            APPOINTMENT MODAL
-        ------------------------------------------------- */}
-
+        {/* ---------- APPOINTMENT MODAL ---------- */}
         {booking && (
-
           <div className="modal-backdrop">
-
             <form
               className="booking-modal"
               role="dialog"
@@ -742,109 +531,55 @@ export function Dashboard() {
               aria-labelledby="booking-title"
               onSubmit={submitBooking}
             >
-
               <button
                 type="button"
                 className="modal-close"
-                onClick={() =>
-                  setBooking(false)
-                }
+                onClick={() => setBooking(false)}
                 aria-label="Close"
               >
                 ×
               </button>
 
-
-              <span>
-                New appointment
-              </span>
-
-              <h2 id="booking-title">
-                Request a consultation
-              </h2>
-
+              <h2 id="booking-title">Request a consultation</h2>
 
               <label>
                 Ophthalmologist
-
-                <select name="doctor">
-
+                <select name="doctor" defaultValue={activeConsent?.doctor_id}>
                   {doctors.map((doctor) => (
-
-                    <option
-                      key={doctor.id}
-                      value={doctor.id}
-                    >
+                    <option key={doctor.id} value={doctor.id}>
                       {doctor.name} — {doctor.specialty}
                     </option>
-
                   ))}
-
                 </select>
-
               </label>
 
-
               <div className="form-pair">
-
                 <label>
                   Date
-
-                  <Input
-                    name="date"
-                    type="date"
-                    min={localToday}
-                    required
-                  />
+                  <Input name="date" type="date" min={localToday} required />
                 </label>
-
 
                 <label>
                   Time
-
-                  <Input
-                    name="time"
-                    type="time"
-                    defaultValue="10:30"
-                  />
+                  <Input name="time" type="time" defaultValue="10:30" />
                 </label>
-
               </div>
-
 
               <label>
                 Reason
-
                 <textarea
                   name="reason"
                   defaultValue="Review my latest retinal screening"
                 />
               </label>
 
+              {bookError && <p className="form-error" role="alert">{bookError}</p>}
 
-              {bookError && (
-
-                <p
-                  className="form-error"
-                  role="alert"
-                >
-                  {bookError}
-                </p>
-
-              )}
-
-
-              <Button
-                size="lg"
-                type="submit"
-              >
+              <Button size="lg" type="submit">
                 Request appointment
               </Button>
-
             </form>
-
           </div>
-
         )}
       </main>
     </AppShell>
