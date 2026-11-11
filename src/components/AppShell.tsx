@@ -2,10 +2,13 @@ import {
   CalendarDays,
   LayoutDashboard,
   LogIn,
-  LogOut
+  LogOut,
+  Moon,
+  Sun
 } from "lucide-react";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { useTheme } from "../hooks/useTheme";
 import { Link } from "../router";
 import { apiRequest } from "../api/client";
 import type { User } from "../api/types";
@@ -42,6 +45,7 @@ export function AppShell({
   const signedIn = Boolean(
     localStorage.getItem("openi.token")
   );
+  const { theme, toggle } = useTheme();
 
   // Resolve the authenticated account role from Flask, not a guess or URL.
   const [portalRole, setPortalRole] = useState<"patient" | "doctor" | null>(null);
@@ -93,6 +97,16 @@ export function AppShell({
           )}
 
           <div className="nav-actions">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm theme-toggle"
+              onClick={toggle}
+              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+              title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+            >
+              {theme === "dark" ? <Sun /> : <Moon />}
+            </button>
+
             {!signedIn && (
               <Link to="/book" className="btn btn-ghost btn-sm header-booking">
                 <CalendarDays /> Book an appointment
