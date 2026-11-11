@@ -1,16 +1,9 @@
 import { useEffect, useState } from "react";
-import {
-  CalendarDays,
-  ChevronRight,
-  CircleAlert,
-  FileText,
-  Search,
-  ShieldCheck,
-  UsersRound,
-} from "lucide-react";
+import { FileText, ScanEye, Search, ShieldCheck } from "lucide-react";
 
-import { AppShell, PageIntro } from "../components/AppShell";
+import { AppShell } from "../components/AppShell";
 import { Button, Input } from "../components/ui";
+import { Link } from "../router";
 
 import {
   errorMessage,
@@ -28,7 +21,6 @@ import { ResearchScanImage } from "../components/ResearchScanImage";
 import { ResearchScanExplanation } from "../components/ResearchScanExplanation";
 import { listPatientResearchScans } from "../api/records";
 import type { Scan } from "../api/types";
-import "./ClinicianCompactHistory.css";
 
 
 const initialsOf = (patient: Patient) =>
@@ -40,17 +32,28 @@ const initialsOf = (patient: Patient) =>
     .slice(0, 2)
     .toUpperCase();
 
+const appointmentStatusLabel: Record<Appointment["status"], string> = {
+  requested: "Pending",
+  confirmed: "Confirmed",
+  declined: "Declined",
+  cancelled: "Cancelled",
+};
+
+function formatDay(date: string) {
+  const day = new Date(`${date}T12:00:00`);
+  return Number.isNaN(day.getTime())
+    ? date
+    : day.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
 
 
 // Appointment requests are independent from permission to view retinal scans.
 // The backend decides which doctor owns each appointment.
-function DoctorAppointmentInbox() {
+function DoctorAppointmentInbox({ onPendingCount }: { onPendingCount: (count: number) => void }) {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [showAllPending, setShowAllPending] = useState(false);
-  const [showOther, setShowOther] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -92,125 +95,73 @@ function DoctorAppointmentInbox() {
   const other = appointments
     .filter((a) => a.status !== "requested" && a.id !== nextConfirmed?.id)
     .sort((a, b) => dateKey(b).localeCompare(dateKey(a)));
-  const visiblePending = showAllPending ? pending : pending.slice(0, 2);
 
-  const rowStyle = {
-    display: "flex" as const,
-    alignItems: "flex-start" as const,
-    justifyContent: "space-between" as const,
-    gap: 12,
-    flexWrap: "wrap" as const,
-    borderBottom: "1px solid var(--border)",
-    padding: "12px 0"
-  };
+  useEffect(() => { onPendingCount(pending.length); }, [pending.length, onPendingCount]);
 
   return (
-    <section className="panel" style={{ marginTop: 22, marginBottom: 18 }}>
-      <div className="panel-head">
-        <div>
-          <span>Appointment management</span>
-          <h2>Appointments</h2>
-          <p className="muted-copy" style={{ marginTop: 6 }}>
-            {pending.length} pending request{pending.length === 1 ? "" : "s"}
-            {nextConfirmed ? " | Next confirmed visit below" : ""}
-          </p>
-        </div>
-        <CalendarDays aria-hidden="true" />
-      </div>
-
-      {loading && <p role="status" style={{ marginTop: 16 }}>Loading appointments...</p>}
+    <div className="appt">
+      {loading && <p role="status" className="side-muted">Loading appointments...</p>}
       {error && <p className="form-error" role="alert">{error}</p>}
       {!loading && !error && appointments.length === 0 && (
-        <p className="muted-copy" style={{ marginTop: 16 }}>
-          No appointment requests yet. New requests will appear here.
-        </p>
+        <p className="side-muted">No appointment requests yet.</p>
       )}
 
       {!loading && appointments.length > 0 && (
         <>
-          {pending.length > 0 ? (
-            <div style={{ marginTop: 16 }}>
-              <strong style={{ display: "block", marginBottom: 2 }}>Needs your response ({pending.length})</strong>
-              {visiblePending.map((appointment) => (
-                <article key={appointment.id} style={rowStyle}>
-                  <div style={{ display: "grid", gap: 3, minWidth: 180, flex: "1 1 240px" }}>
-                    <strong>{appointment.patient_name || "Patient account"}</strong>
-                    <small>{appointment.date} at {appointment.time}</small>
-                    <small style={{ color: "var(--muted-foreground)" }}>
-                      {appointment.reason?.trim() || "No reason provided"}
-                    </small>
-                  </div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <Button size="sm" disabled={busyId !== null}
-                      onClick={() => decide(appointment.id, "confirmed")}>
-                      {busyId === appointment.id ? "Saving..." : "Confirm"}
-                    </Button>
-                    <Button size="sm" variant="outline" disabled={busyId !== null}
-                      onClick={() => decide(appointment.id, "declined")}>
-                      Decline
-                    </Button>
-                  </div>
-                </article>
-              ))}
-              {pending.length > 2 && (
-                <Button type="button" size="sm" variant="outline"
-                  onClick={() => setShowAllPending((v) => !v)}>
-                  {showAllPending ? "Show fewer requests" : `Show all pending (${pending.length})`}
-                </Button>
-              )}
-            </div>
-          ) : (
-            <p className="muted-copy" style={{ marginTop: 12 }}>No requests need a response.</p>
-          )}
+          <div>
+            <span className="card-label">Needs your response ({pending.length})</span>
+            {pending.length === 0 && <p className="side-muted appt-empty">Nothing waiting.</p>}
+            {pending.map((appointment) => (
+              <article key={appointment.id} className="appt-row">
+                <div className="appt-info">
+                  <strong>{appointment.patient_name || "Patient account"}</strong>
+                  <small>{formatDay(appointment.date)} at {appointment.time}</small>
+                  <small>{appointment.reason?.trim() || "No reason provided"}</small>
+                </div>
+                <div className="appt-actions">
+                  <Button size="sm" disabled={busyId !== null}
+                    onClick={() => decide(appointment.id, "confirmed")}>
+                    {busyId === appointment.id ? "Saving..." : "Confirm"}
+                  </Button>
+                  <Button size="sm" variant="outline" disabled={busyId !== null}
+                    onClick={() => decide(appointment.id, "declined")}>
+                    Decline
+                  </Button>
+                </div>
+              </article>
+            ))}
+          </div>
 
           {nextConfirmed && (
-            <div style={{
-              marginTop: 14, padding: "12px 14px", background: "var(--vanilla-soft)",
-              borderLeft: "3px solid var(--primary)", borderRadius: 4
-            }}>
-              <strong style={{ display: "block", marginBottom: 5 }}>Next confirmed appointment</strong>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                <div>
-                  <strong>{nextConfirmed.patient_name || "Patient account"}</strong>
-                  <div style={{ fontSize: 13 }}>{nextConfirmed.date} at {nextConfirmed.time}</div>
-                  {nextConfirmed.reason?.trim() && (
-                    <small style={{ color: "var(--muted-foreground)" }}>{nextConfirmed.reason}</small>
-                  )}
-                </div>
-                <span className="grade" style={{ alignSelf: "flex-start" }}>Confirmed</span>
+            <div className="appt-next">
+              <span className="card-label">Next confirmed</span>
+              <div className="side-row">
+                <strong>{nextConfirmed.patient_name || "Patient account"}</strong>
+                <span className="status-pill is-confirmed">{formatDay(nextConfirmed.date)}, {nextConfirmed.time}</span>
               </div>
+              {nextConfirmed.reason?.trim() && <small>{nextConfirmed.reason}</small>}
             </div>
           )}
 
           {other.length > 0 && (
-            <div style={{ marginTop: 12 }}>
-              <Button type="button" size="sm" variant="outline"
-                onClick={() => setShowOther((v) => !v)}>
-                {showOther ? "Hide other appointments" : `View other appointments (${other.length})`}
-              </Button>
-              {showOther && (
-                <div style={{ marginTop: 7 }}>
-                  {other.map((appointment) => (
-                    <article key={appointment.id} style={rowStyle}>
-                      <div style={{ display: "grid", gap: 3, flex: "1 1 230px" }}>
-                        <strong>{appointment.patient_name || "Patient account"}</strong>
-                        <small>{appointment.date} at {appointment.time}</small>
-                        {appointment.reason?.trim() && (
-                          <small style={{ color: "var(--muted-foreground)" }}>{appointment.reason}</small>
-                        )}
-                      </div>
-                      <span className="grade" style={{ alignSelf: "flex-start" }}>
-                        {appointment.status}
-                      </span>
-                    </article>
-                  ))}
-                </div>
-              )}
-            </div>
+            <details className="appt-other">
+              <summary>Other appointments ({other.length})</summary>
+              {other.map((appointment) => (
+                <article key={appointment.id} className="appt-row">
+                  <div className="appt-info">
+                    <strong>{appointment.patient_name || "Patient account"}</strong>
+                    <small>{formatDay(appointment.date)} at {appointment.time}</small>
+                  </div>
+                  <span className={`status-pill is-${appointment.status}`}>
+                    {appointmentStatusLabel[appointment.status]}
+                  </span>
+                </article>
+              ))}
+            </details>
           )}
         </>
       )}
-    </section>
+    </div>
   );
 }
 
@@ -243,6 +194,9 @@ export function Doctor() {
   const [researchScans, setResearchScans] = useState<Scan[]>([]);
   const [scansError, setScansError] = useState("");
   const [chosenScanId, setChosenScanId] = useState<string | null>(null);
+  const [showAllScans, setShowAllScans] = useState(false);
+  const [tab, setTab] = useState<"patients" | "appointments">("patients");
+  const [pendingCount, setPendingCount] = useState(0);
 
 
   // Select the clicked patient.
@@ -269,6 +223,7 @@ export function Doctor() {
     let active = true;
     setResearchScans([]);
     setScansError("");
+    setShowAllScans(false);
     listPatientResearchScans(selected.id)
       .then((scans) => { if (active) setResearchScans(scans); })
       .catch(() => { if (active) setScansError("Unable to load research history"); });
@@ -283,6 +238,7 @@ export function Doctor() {
   const confidence = activeScan?.confidence ?? selected?.latest_confidence;
   const activeLabel = activeScan?.label ?? selected?.latest_label;
   const hasScreening = level !== undefined;
+  const visibleScans = showAllScans ? researchScans : researchScans.slice(0, 4);
 
 
   async function share() {
@@ -310,358 +266,246 @@ export function Doctor() {
 
   return (
     <AppShell>
-      <main className="portal-shell">
+      <main className="portal-shell dash">
 
-        <PageIntro
-          eyebrow="Clinician workspace"
-          title="Clinician Dashboard"
-          description="Manage appointment requests, review retinal screenings shared with you, and provide follow-up guidance."
-        />
+        <header className="dash-head">
+          <div>
+            <span className="dash-role">Clinician workspace</span>
+            <h1>Patient reviews</h1>
 
+            <p className="stat-line">
+              <span><strong>{stats.active_patients}</strong> active patients</span>
+              <span><strong>{stats.awaiting_review}</strong> awaiting review</span>
+              <span><strong>{stats.todays_visits}</strong> visits today</span>
+            </p>
+          </div>
 
-        {/* Doctor statistics */}
-        <DoctorAppointmentInbox />
-
-        <div className="clinician-stats">
-
-          <article>
-            <UsersRound />
-
-            <span>
-              Active patients
-            </span>
-
-            <strong>
-              {stats.active_patients}
-            </strong>
-          </article>
+          <Link className="btn btn-lg" to="/analyze">
+            <ScanEye />
+            New screening
+          </Link>
+        </header>
 
 
-          <article>
-            <CircleAlert />
+        <div className="doc-grid">
 
-            <span>
-              Awaiting review
-            </span>
+          {/* ---------- LEFT: patients / appointments ---------- */}
+          <section className="panel doc-side">
 
-            <strong>
-              {stats.awaiting_review}
-            </strong>
-          </article>
-
-
-          <article>
-            <CalendarDays />
-
-            <span>
-              Today’s visits
-            </span>
-
-            <strong>
-              {stats.todays_visits}
-            </strong>
-          </article>
-
-        </div>
-
-
-        <div className="doctor-grid">
-
-          {/* Patient list */}
-          <section className="patient-list panel">
-
-            <div className="panel-head">
-              <div>
-                <span>
-                  Shared with you
-                </span>
-
-                <h2>
-                  Patients
-                </h2>
-              </div>
+            <div className="seg seg-wide" role="group" aria-label="Workspace list">
+              <button type="button" aria-pressed={tab === "patients"} onClick={() => setTab("patients")}>
+                Patients
+              </button>
+              <button type="button" aria-pressed={tab === "appointments"} onClick={() => setTab("appointments")}>
+                Appointments
+                {pendingCount > 0 && <span className="count-badge">{pendingCount}</span>}
+              </button>
             </div>
 
 
-            <div className="search-box">
-              <Search />
-
-              <Input
-                placeholder="Search patients"
-                value={query}
-                onChange={(e) =>
-                  setQuery(e.target.value)
-                }
-              />
-            </div>
-
-
-            {/* No patients have granted access */}
-            {patients.length === 0 ? (
-
-              <div className="empty-history">
-
-                <div className="mini-retina">
-                  <ShieldCheck />
-                </div>
-
-                <h3>
-                  No patients have shared access
-                </h3>
-
-                <p>
-                  Patients who select you as their
-                  ophthalmologist will appear here.
-                </p>
-
-              </div>
-
-            ) : visible.length === 0 ? (
-
-              <div className="empty-history">
-
+            <div hidden={tab !== "patients"} className="doc-pane">
+              <div className="search-box">
                 <Search />
 
-                <h3>
-                  No matching patients
-                </h3>
-
-                <p>
-                  Try searching by a different name
-                  or patient ID.
-                </p>
-
+                <Input
+                  placeholder="Search patients"
+                  aria-label="Search patients"
+                  value={query}
+                  onChange={(e) =>
+                    setQuery(e.target.value)
+                  }
+                />
               </div>
 
-            ) : (
+              {/* No patients have granted access */}
+              {patients.length === 0 ? (
 
-              visible.map((patient) => {
+                <div className="empty-history">
+                  <div className="mini-retina">
+                    <ShieldCheck />
+                  </div>
 
-                const patientHasScan =
-                  patient.latest_grade !== undefined;
+                  <h3>No patients have shared access</h3>
 
-                return (
-                  <button
-                    key={patient.id}
-                    className={
-                      selected?.id === patient.id
-                        ? "patient-row active"
-                        : "patient-row"
-                    }
-                    onClick={() => {
-                      // Clicking the already selected patient must not clear their scans.
-                      // The loading effect only reruns when selected.id changes.
-                      if (selected?.id === patient.id) return;
-                      if (note.trim() && !window.confirm("Discard your unsaved doctor's note?")) return;
-                      setSelectedId(patient.id);
-                      setChosenScanId(null);
-                      // Switching patients triggers the useEffect above to clear and refetch history.
-                      setNote("");
-                      setSaved(false);
-                      setError("");
-                    }}
-                  >
+                  <p>
+                    Patients who select you as their
+                    ophthalmologist will appear here.
+                  </p>
+                </div>
 
-                    <span className="patient-avatar">
-                      {initialsOf(patient)}
-                    </span>
+              ) : visible.length === 0 ? (
 
+                <p className="side-muted">No patients match that search.</p>
 
-                    <span>
+              ) : (
 
-                      <strong>
-                        {patient.name}
-                      </strong>
+                <div className="history-list doc-list">
+                  {visible.map((patient) => (
+                    <button
+                      key={patient.id}
+                      type="button"
+                      className={`history-row${selected?.id === patient.id ? " is-active" : ""}`}
+                      aria-pressed={selected?.id === patient.id}
+                      onClick={() => {
+                        // Clicking the already selected patient must not clear their scans.
+                        // The loading effect only reruns when selected.id changes.
+                        if (selected?.id === patient.id) return;
+                        if (note.trim() && !window.confirm("Discard your unsaved doctor's note?")) return;
+                        setSelectedId(patient.id);
+                        setChosenScanId(null);
+                        // Switching patients triggers the useEffect above to clear and refetch history.
+                        setNote("");
+                        setSaved(false);
+                        setError("");
+                      }}
+                    >
+                      <span className="patient-avatar">{initialsOf(patient)}</span>
 
-                      <small>
-                        {patient.latest_scan_at
-                          ? `Latest test: ${new Date(patient.latest_scan_at).toLocaleDateString()}`
-                          : "No screening yet"}
-                      </small>
-
-                    </span>
-
-
-                    {patientHasScan ? (
-
-                      <span
-                        className={`grade grade-${patient.latest_grade}`}
-                      >
-                        L{patient.latest_grade}
+                      <span className="history-text">
+                        <strong>{patient.name}</strong>
+                        <small>
+                          {patient.latest_scan_at
+                            ? new Date(patient.latest_scan_at).toLocaleDateString()
+                            : "No screening yet"}
+                        </small>
                       </span>
 
-                    ) : (
+                      {patient.latest_grade !== undefined ? (
+                        <span className={`grade grade-${patient.latest_grade}`}>
+                          L{patient.latest_grade}
+                        </span>
+                      ) : (
+                        <span className="grade">—</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
 
-                      <span className="grade">
-                        —
-                      </span>
+              )}
 
-                    )}
+              <p className="doc-note">
+                Access is consent-based. A patient disappears from this list if they revoke consent.
+              </p>
+            </div>
 
 
-                    <ChevronRight />
-
-                  </button>
-                );
-              })
-
-            )}
+            <div hidden={tab !== "appointments"} className="doc-pane">
+              <DoctorAppointmentInbox onPendingCount={setPendingCount} />
+            </div>
 
           </section>
 
 
-          {/* Selected patient review */}
-          {selected && (
+          {/* ---------- RIGHT: selected patient review ---------- */}
+          {selected ? (
 
-            <section className="review-panel panel oi-compact-review">
+            <section className="panel feature-card">
 
-              <div className="review-title">
-
+              <div className="review-head">
                 <div>
-                  <span>
-                    Current review
-                  </span>
-
-                  <h2>
-                    {selected.name}
-                  </h2>
-
-                  <p>
+                  <span className="card-label">
                     {activeScan
-                      ? `Viewing test from ${new Date(activeScan.created_at).toLocaleString()}`
+                      ? `Test from ${new Date(activeScan.created_at).toLocaleString()}`
                       : selected.latest_scan_at
                         ? "Latest saved research test"
                         : "No screening yet"}
-                  </p>
+                  </span>
+                  <h2>{selected.name}</h2>
                 </div>
-
 
                 {hasScreening && level !== undefined ? (
-
-                  <span
-                    className={`grade grade-${level}`}
-                  >
-                    Level {level}
-                  </span>
-
+                  <span className={`grade grade-${level}`}>Level {level}</span>
                 ) : (
-
-                  <span className="grade">
-                    No scan
-                  </span>
-
+                  <span className="grade">No scan</span>
                 )}
-
               </div>
 
-
-              {researchScans.length > 0 && (
-                <div className="oi-clinician-history" aria-label="Select a saved research test">
-                  <div className="oi-clinician-history-heading">
-                    <strong>Saved research tests ({researchScans.length})</strong>
-                    <small>Choose a test to view its image, result and AI explanation.</small>
-                  </div>
-                  <div className="oi-clinician-history-list">
-                    {researchScans.map((scan) => (
-                      <button
-                        key={scan.id}
-                        type="button"
-                        className={`oi-clinician-history-row ${activeScanId === scan.id ? "is-active" : ""}`}
-                        aria-pressed={activeScanId === scan.id}
-                        onClick={() => {
-                          if (activeScanId !== scan.id && note.trim() && !window.confirm("Discard your unsaved doctor's note?")) return;
-                          setChosenScanId(scan.id); setSaved(false); setNote("");
-                        }}
-                      >
-                        <span>{new Date(scan.created_at).toLocaleString()}</span>
-                        <strong>Grade {scan.grade}: {scan.label}</strong>
-                        <span>{(scan.confidence * 100).toFixed(1)}% score <ChevronRight size={15} aria-hidden="true" /></span>
-                      </button>
-                    ))}
-                  </div>
-                  <small>Research classifications only; not clinically verified findings.</small>
-                </div>
-              )}
               {scansError && <p className="form-error" role="alert">{scansError}</p>}
 
-              {/* Screening exists */}
               {hasScreening ? (
 
                 <>
-                  <div className="scan-detail">
+                  <div className="feature-body">
 
                     {activeScanId ? (
                       <ResearchScanImage key={activeScanId} scanId={activeScanId}
-                        className="fundus-placeholder" alt={`Experimental retinal image for ${selected.name}`} />
+                        className="feature-image" alt={`Experimental retinal image for ${selected.name}`} />
                     ) : (
-
-                      <div className="fundus-placeholder">
-                        <span />
-                        <span />
-                        <span />
-
-                        <small>
-                          Retinal image preview
-                        </small>
-                      </div>
-
+                      <div className="feature-image feature-image-empty">Retinal image unavailable</div>
                     )}
 
+                    <div className="feature-info">
+                      <h3 className="feature-label">{activeLabel ?? "Result pending"}</h3>
 
-                    <div>
-
-                      <span>
-                        RETINA26 research result — not a diagnosis
-                      </span>
-
-                      <h3>
-                        {activeLabel ??
-                          "Result pending"}
-                      </h3>
-
-
-                      <strong>
+                      <p className="feature-confidence">
                         {confidence !== undefined
-                          ? `${Math.round(
-                              confidence <= 1
-                                ? confidence * 100
-                                : confidence
-                            )}% model confidence`
+                          ? `${Math.round(confidence <= 1 ? confidence * 100 : confidence)}% model confidence`
                           : "Model confidence pending"}
-                      </strong>
-
-
-                      <p>
-                        {activeScan
-                          ? "This is an experimental model classification of the selected saved photograph, not a medical diagnosis."
-                          : selected.latest_explanation ?? "Experimental research result; not a medical diagnosis."}
                       </p>
 
+                      {activeScanId && level !== undefined && (
+                        <ResearchScanExplanation key={activeScanId} scanId={activeScanId}
+                          grade={level} label={activeLabel ?? "Research result"} />
+                      )}
+
+                      <p className="feature-disclaimer">
+                        Experimental research classification. Not a diagnosis or a verified finding.
+                      </p>
                     </div>
 
                   </div>
 
 
-                  {activeScanId && level !== undefined && (
-                    <ResearchScanExplanation key={activeScanId} scanId={activeScanId}
-                      grade={level} label={activeLabel ?? "Research result"} />
+                  {researchScans.length > 1 && (
+                    <div className="scan-picker">
+                      <div className="panel-head">
+                        <span className="card-label">Saved tests ({researchScans.length})</span>
+                        {researchScans.length > 4 && (
+                          <Button variant="ghost" size="sm" onClick={() => setShowAllScans((v) => !v)}>
+                            {showAllScans ? "Show fewer" : "View all"}
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="history-list">
+                        {visibleScans.map((scan) => (
+                          <button
+                            key={scan.id}
+                            type="button"
+                            className={`history-row scan-pick${activeScanId === scan.id ? " is-active" : ""}`}
+                            aria-pressed={activeScanId === scan.id}
+                            onClick={() => {
+                              if (activeScanId !== scan.id && note.trim() && !window.confirm("Discard your unsaved doctor's note?")) return;
+                              setChosenScanId(scan.id); setSaved(false); setNote("");
+                            }}
+                          >
+                            <span className="history-text">
+                              <strong>{scan.label}</strong>
+                              <small>
+                                {new Date(scan.created_at).toLocaleString()} · {(scan.confidence * 100).toFixed(1)}% score
+                              </small>
+                            </span>
+                            <span className={`grade grade-${scan.grade}`}>L{scan.grade}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   )}
 
 
                   {/* Optional note editor, collapsed until the clinician needs it. */}
-                  <details className="oi-clinician-note-details">
+                  <details className="note-details">
                     <summary>Write a note for this patient</summary>
-                    <div className="note-editor oi-clinician-note-editor">
-                      <div><FileText /><span>Doctor’s note</span></div>
+                    <div className="note-fields">
                       <textarea
-                        rows={3}
+                        rows={4}
                         placeholder="Write your observations or follow-up instructions..."
                         aria-label="Doctor's note"
                         value={note}
                         onChange={(e) => { setNote(e.target.value); setSaved(false); }}
                       />
                       {error && <p className="form-error" role="alert">{error}</p>}
-                      {saved && <p role="status">Note saved and shared with the patient.</p>}
+                      {saved && <p role="status" className="side-muted">Note saved and shared with the patient.</p>}
                       <Button type="button" disabled={!note.trim()} onClick={share}>
                         Save &amp; share with patient
                       </Button>
@@ -673,37 +517,32 @@ export function Doctor() {
 
                 /* Patient has consented but has no scan */
                 <div className="empty-history">
-
                   <div className="mini-retina">
                     <FileText />
                   </div>
 
-                  <h3>
-                    No retinal screening available
-                  </h3>
+                  <h3>No retinal screening yet</h3>
 
                   <p>
-                    This patient has granted you access,
-                    but they have not completed a retinal
-                    screening yet.
+                    This patient has shared access with you but has not completed a screening.
                   </p>
-
                 </div>
 
               )}
 
             </section>
 
+          ) : (
+
+            <section className="panel results-empty">
+              <div className="mini-retina"><ShieldCheck /></div>
+              <h2>No patient selected</h2>
+              <p>Patients who share their records with you will appear on the left.</p>
+            </section>
+
           )}
 
         </div>
-
-
-        <p className="privacy-line">
-          Patient access is consent-based. Records
-          disappear from this workspace when consent
-          is revoked.
-        </p>
 
       </main>
     </AppShell>
