@@ -1,40 +1,57 @@
 import {
-  Activity,
   ArrowRight,
+  ClipboardPlus,
   Eye,
   ScanEye,
-  ShieldCheck,
+  ScanSearch,
+  Share2,
+  Stethoscope,
+  Upload,
+  UserRound,
 } from "lucide-react";
 
 import { AppShell } from "../components/AppShell";
 import { Link } from "../router";
 
-const grades = [
-  [
-    "0",
-    "No DR",
-    "No visible abnormalities associated with diabetic retinopathy.",
-  ],
-  [
-    "1",
-    "Mild",
-    "Small areas of vessel swelling known as microaneurysms.",
-  ],
-  [
-    "2",
-    "Moderate",
-    "Vessels nourishing the retina may become blocked.",
-  ],
-  [
-    "3",
-    "Severe",
-    "More vessels are blocked, reducing retinal blood supply.",
-  ],
-  [
-    "4",
-    "Proliferative",
-    "New, fragile blood vessels may grow across the retina.",
-  ],
+const steps = [
+  {
+    icon: Upload,
+    title: "Upload",
+    text: "Add a retinal photograph taken during a clinic visit.",
+  },
+  {
+    icon: ScanSearch,
+    title: "Review",
+    text: "The model grades it from level 0 to 4, and a heatmap shows what influenced the result.",
+  },
+  {
+    icon: Share2,
+    title: "Share",
+    text: "Send results to an ophthalmologist for follow-up care.",
+  },
+];
+
+const roles = [
+  {
+    icon: UserRound,
+    title: "Patients",
+    text: "Keep your screening history in one place and choose who can see it.",
+    to: "/auth?role=patient",
+    cta: "Patient portal",
+  },
+  {
+    icon: ClipboardPlus,
+    title: "Nurses",
+    text: "Upload photographs during a visit and pass results to the care team.",
+    soon: true,
+  },
+  {
+    icon: Stethoscope,
+    title: "Ophthalmologists",
+    text: "Review shared results, run your own screenings, and leave guidance.",
+    to: "/auth?role=doctor",
+    cta: "Clinician workspace",
+  },
 ];
 
 export function Home() {
@@ -46,32 +63,27 @@ export function Home() {
             <div>
               <span className="eyebrow">
                 <ScanEye />
-                Eye health, made visible
+                Open source · Diabetic retinopathy
               </span>
 
               <h1>
-                See risk sooner.
-                <br />
-                <em>Protect sight longer.</em>
+                An open-source platform for <em>diabetic retinopathy</em> screening.
               </h1>
 
               <p>
-                openI helps patients and clinicians turn retinal
-                photographs into clear diabetic retinopathy screening
-                support.
+                From retinal photograph to explained result, for patients,
+                nurses, and ophthalmologists.
               </p>
 
               <div className="hero-actions">
                 <Link className="btn btn-lg" to="/analyze">
-                  Explore screening
+                  Start a screening
                   <ArrowRight />
                 </Link>
 
-                <Link className="btn btn-outline btn-lg" to="/auth?role=patient">
-                  Patient portal
-                </Link>
-                <Link className="btn btn-outline btn-lg" to="/auth?role=doctor">
-                  Clinician workspace
+                <Link className="text-link" to="/auth">
+                  Sign in
+                  <ArrowRight />
                 </Link>
               </div>
             </div>
@@ -92,99 +104,42 @@ export function Home() {
           </div>
         </section>
 
-        <section className="content-band intro-grid">
-          <div className="section-heading">
-            <span>Understanding the condition</span>
+        <section className="content-band home-section">
+          <h2 className="home-heading">How it works</h2>
 
-            <h2>
-              Diabetic retinopathy can progress quietly.
-            </h2>
-          </div>
-
-          <div className="body-copy">
-            <p>
-              High blood sugar can damage the small blood vessels
-              in the retina, which is the light sensitive tissue
-              at the back of the eye. Early changes may happen
-              before vision feels different.
-            </p>
-
-            <p>
-              Regular screening can identify signs sooner,
-              helping an ophthalmologist plan follow-up care
-              before preventable vision loss occurs.
-            </p>
-          </div>
-        </section>
-
-        <section className="signal-band">
-          <article>
-            <Activity />
-            <strong>9.6 million</strong>
-            <span>
-              people in the U.S. estimated to live with DR
-            </span>
-          </article>
-
-          <article>
-            <Eye />
-            <strong>5 grades</strong>
-            <span>
-              from no visible DR to proliferative disease
-            </span>
-          </article>
-
-          <article>
-            <ShieldCheck />
-            <strong>Early action</strong>
-            <span>
-              supports timely specialist review and care
-            </span>
-          </article>
-        </section>
-
-        <section className="content-band">
-          <div className="section-heading">
-            <span>Severity scale</span>
-
-            <h2>
-              Five grades. One clear pathway.
-            </h2>
-
-            <p>
-              The documented classification system separates
-              retinal findings into five levels.
-            </p>
-          </div>
-
-          <div className="grade-list">
-            {grades.map(([level, name, text]) => (
-              <article key={level}>
-                <span className={`grade grade-${level}`}>
-                  Level {level}
-                </span>
-
-                <h3>{name}</h3>
-
+          <div className="step-grid">
+            {steps.map(({ icon: Icon, title, text }, index) => (
+              <article key={title} className="step">
+                <span className="step-number">{index + 1}</span>
+                <Icon aria-hidden="true" />
+                <h3>{title}</h3>
                 <p>{text}</p>
               </article>
             ))}
           </div>
         </section>
 
-        <section className="cta-band">
-          <div>
-            <span>Ready when you are</span>
+        <section className="content-band home-section home-section-last">
+          <h2 className="home-heading">Built for the whole care team</h2>
 
-            <h2>
-              Bring your retinal photographs into focus.
-            </h2>
+          <div className="role-grid">
+            {roles.map(({ icon: Icon, title, text, to, cta, soon }) => (
+              <article key={title} className="role-card">
+                <Icon aria-hidden="true" />
+                <h3>
+                  {title}
+                  {soon && <span className="soon-tag">Coming soon</span>}
+                </h3>
+                <p>{text}</p>
+                {to && (
+                  <Link className="text-link" to={to}>
+                    {cta}
+                    <ArrowRight />
+                  </Link>
+                )}
+              </article>
+            ))}
           </div>
-
-          <Link className="btn btn-lg" to="/analyze">
-            Explore screening workspace
-            <ArrowRight />
-          </Link>
         </section>
       </main>
     </AppShell>
