@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { FileImage, ScanLine, Trash2, UploadCloud } from "lucide-react";
+import { Check, Info, Loader2, ScanLine, ScanEye, UploadCloud, X } from "lucide-react";
 import { errorMessage, predictRetinalImage, type Prediction } from "../api";
 import { Button } from "./ui";
 import { Link } from "../router";
 import { ResearchScanExplanation } from "./ResearchScanExplanation";
-import "./RetinaExplanationCompact.css";
 
 type Preview = { file: File; url: string };
 const MAX_FILES = 6;
@@ -20,6 +19,7 @@ export function ScanUploader() {
   const [running, setRunning] = useState(false);
   const [completed, setCompleted] = useState(0);
   const [confirmedTestData, setConfirmedTestData] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const previewsRef = useRef<Preview[]>([]);
 
@@ -82,107 +82,176 @@ export function ScanUploader() {
     }
   }
 
+  const analyzing = running ? previews[completed] : undefined;
+  const finished = previews.filter((item) => results[item.url]);
+  const canRun = !running && previews.length > 0 && confirmedTestData;
+
   return (
-    <div className="scan-workspace">
-      <div className="clinical-note" role="status">
-        <strong>YOLO26 Nano — research testing</strong>
-        <p>
-          This experimental classifier is not clinically validated. Use test fundus
-          photographs only, never rely on its grade for diagnosis or treatment,
-          and do not upload identifiable patient records. Experimental Grad-CAM explanations
-          are available on saved test results. Images are processed locally by Flask and
-          test predictions and images are stored in your private research history. Only authorized clinicians can access them.
-        </p>
-      </div>
+    <div className="scan-layout">
 
-      <button type="button" className="drop-zone" disabled={running}
-        onClick={() => inputRef.current?.click()}
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => { event.preventDefault(); addFiles(event.dataTransfer.files); }}>
-        <span className="upload-orbit"><UploadCloud /></span>
-        <strong>Select retinal test photographs</strong>
-        <small>Click to browse or drag files here · JPG/PNG · 6 files max · 10 MB each</small>
-      </button>
-      <input ref={inputRef} hidden type="file" accept="image/png,image/jpeg"
-        multiple disabled={running} onChange={(event) => addFiles(event.target.files)} />
+      {/* ---------- LEFT: add photographs and run ---------- */}
+      <section className="panel scan-panel" aria-label="Add photographs">
+        <h2 className="card-title">Photographs</h2>
 
-      {previews.length > 0 && (
-        <>
-          <div className="file-strip">
-            {previews.map((item) => (
-              <div key={item.url}>
-                <FileImage />
-                <span title={item.file.name}>{item.file.name}</span>
-                <button type="button" aria-label={`Remove ${item.file.name}`}
-                  disabled={running} onClick={() => removeFile(item.url)}><Trash2 /></button>
-              </div>
+        <button
+          type="button"
+          className={`drop-zone${dragging ? " is-dragging" : ""}`}
+          disabled={running}
+          onClick={() => inputRef.current?.click()}
+          onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragging(false);
+            addFiles(event.dataTransfer.files);
+          }}
+        >
+          <span className="upload-orbit"><UploadCloud /></span>
+          <strong>Add retinal photographs</strong>
+          <small>Click or drag · JPG/PNG · up to {MAX_FILES} files · 10 MB each</small>
+        </button>
+        <input ref={inputRef} hidden type="file" accept="image/png,image/jpeg"
+          multiple disabled={running} onChange={(event) => addFiles(event.target.files)} />
+
+        {previews.length > 0 && (
+          <ul className="upload-list">
+            {previews.map(({ file, url }) => (
+              <li key={url}>
+                <img src={url} alt="" />
+                <span title={file.name}>{file.name}</span>
+                {results[url] && <Check className="upload-done" aria-label="Analyzed" />}
+                <button type="button" aria-label={`Remove ${file.name}`}
+                  disabled={running} onClick={() => removeFile(url)}><X /></button>
+              </li>
             ))}
-          </div>
-          <section className="results-section retina26-results-section" aria-label="Retinal research predictions">
-            <div className="section-heading">
-              <span>Research screening</span><h2>Selected photographs</h2>
-              <p>These results are experimental model outputs, not clinical findings.</p>
-            </div>
-            <div className="retina26-results-list">
-              {previews.map(({ file, url }) => {
-                const prediction = results[url];
-                return (
-                  <article className="retina26-result" key={url}>
-                    <img className="retina26-result-thumb" src={url} alt={`Retinal test photograph ${file.name}`} />
-                    <div className="retina26-result-body">
-                      <div className="retina26-result-top">
-                        <h3>{prediction ? `${prediction.label} — Grade ${prediction.grade}` : "Awaiting model test"}</h3>
-                        {prediction && <span className="retina26-result-confidence">Model score: {(prediction.confidence * 100).toFixed(1)}%</span>}
-                      </div>
-                      <p className="retina26-result-file">{file.name}</p>
-                      {prediction ? (
-                        <>
-                          <p className="retina26-result-subline">Experimental classification, not a diagnosis. The score is not a clinical probability.</p>
-                          {prediction.scan_id && (
-                            <p className="retina26-result-saved"><strong>Saved to research history.</strong> <Link to="/dashboard">View patient portal</Link></p>
-                          )}
-                          {prediction.scan_id && (
-                            <ResearchScanExplanation scanId={prediction.scan_id} grade={prediction.grade} label={prediction.label} />
-                          )}
-                          {prediction.probabilities && (
-                            <details className="retina26-prob-details">
-                              <summary>Show all five model scores</summary>
-                              <div className="retina26-prob-grid">
-                                {GRADES.map((name) => (
-                                  <span key={name}>{name}: {((prediction.probabilities?.[name] ?? 0) * 100).toFixed(1)}%</span>
-                                ))}
-                              </div>
-                            </details>
-                          )}
-                        </>
-                      ) : <p className="retina26-result-subline">No result has been generated for this photograph yet.</p>}
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-        </>
-      )}
+          </ul>
+        )}
 
-      {previews.length > 0 && (
-        <label style={{ display: "block", marginTop: 16 }}>
-          <input type="checkbox" checked={confirmedTestData} disabled={running}
-            onChange={(e) => setConfirmedTestData(e.target.checked)} />{" "}
-          I confirm these are non-identifiable retinal fundus test images.
-        </label>
-      )}
-      {error && <p className="form-error" role="alert">{error}</p>}
-      <div className="process-row">
-        <span>{previews.length} photograph{previews.length === 1 ? "" : "s"} selected{running ? ` · ${completed} of ${previews.length} analyzed` : ""}</span>
-        <div>
-          <Button variant="outline" type="button" disabled={running} onClick={clearFiles}>Clear</Button>
-          <Button type="button" disabled={running || previews.length === 0 || !confirmedTestData}
-            onClick={runScreening}>
-            <ScanLine /> {running ? "Analyzing…" : "Begin openI scan"}
+        {previews.length > 0 && (
+          <label className="confirm-check">
+            <input type="checkbox" checked={confirmedTestData} disabled={running}
+              onChange={(e) => setConfirmedTestData(e.target.checked)} />
+            <span>I confirm these are non-identifiable retinal fundus test images.</span>
+          </label>
+        )}
+
+        {error && <p className="form-error" role="alert">{error}</p>}
+
+        <Button type="button" size="lg" className="w-full" disabled={!canRun} onClick={runScreening}>
+          <ScanLine /> {running ? `Analyzing ${completed + 1} of ${previews.length}…` : "Begin openI scan"}
+        </Button>
+
+        {running && (
+          <span className="bar-track" role="progressbar" aria-label="Analysis progress"
+            aria-valuemin={0} aria-valuemax={previews.length} aria-valuenow={completed}>
+            <span className="bar-fill is-progress" style={{ width: `${(completed / previews.length) * 100}%` }} />
+          </span>
+        )}
+
+        {previews.length > 0 && !running && (
+          <Button variant="ghost" type="button" size="sm" className="clear-link" onClick={clearFiles}>
+            Clear all
           </Button>
+        )}
+
+        <div className="research-note">
+          <p>
+            <Info aria-hidden="true" />
+            Research use only. Use non-identifiable fundus photographs. Results are not a diagnosis.
+          </p>
+          <details>
+            <summary>About this test</summary>
+            <p>
+              This experimental classifier (YOLO26 Nano) is not clinically validated. Never rely on its
+              grade for diagnosis or treatment, and do not upload identifiable patient records.
+              Experimental Grad-CAM explanations are available on saved test results. Images are
+              processed locally by Flask, and test predictions and images are stored in your private
+              research history. Only authorized clinicians can access them.
+            </p>
+          </details>
         </div>
-      </div>
+      </section>
+
+
+      {/* ---------- RIGHT: results ---------- */}
+      <section className="scan-results" aria-label="Retinal research predictions" aria-live="polite">
+        {finished.length === 0 && !analyzing && (
+          <div className="panel results-empty">
+            <div className="mini-retina"><ScanEye /></div>
+            <h2>{previews.length === 0 ? "Results will appear here" : "Ready to scan"}</h2>
+            <p>
+              {previews.length === 0
+                ? "Add one or more retinal photographs to get started."
+                : "Confirm the images are test photographs, then begin the scan."}
+            </p>
+          </div>
+        )}
+
+        {finished.map(({ file, url }) => {
+          const prediction = results[url];
+          return (
+            <article className="panel result-row" key={url}>
+              <img className="result-thumb" src={url} alt={`Retinal test photograph ${file.name}`} />
+
+              <div className="result-body">
+                <div className="result-heading">
+                  <span className={`grade grade-${prediction.grade}`}>Level {prediction.grade}</span>
+                  <h2>{prediction.label}</h2>
+                </div>
+
+                <p className="result-meta">
+                  <span title="A model score, not a clinical probability">
+                    {(prediction.confidence * 100).toFixed(1)}% model score
+                  </span>
+                  <span className="result-file" title={file.name}>{file.name}</span>
+                </p>
+
+                {prediction.scan_id && (
+                  <p className="result-saved">
+                    <Check aria-hidden="true" /> Saved to research history ·{" "}
+                    <Link to="/dashboard">View in portal</Link>
+                  </p>
+                )}
+
+                {prediction.scan_id && (
+                  <ResearchScanExplanation scanId={prediction.scan_id} grade={prediction.grade} label={prediction.label} />
+                )}
+
+                {prediction.probabilities && (
+                  <details className="score-details">
+                    <summary>All five model scores</summary>
+                    <ul className="bars">
+                      {GRADES.map((name) => {
+                        const value = prediction.probabilities?.[name] ?? 0;
+                        return (
+                          <li key={name} className={`bar-row${name === prediction.label ? " is-top" : ""}`}>
+                            <span className="bar-name">{name}</span>
+                            <span className="bar-track" aria-hidden="true">
+                              <span className="bar-fill" style={{ width: `${value * 100}%` }} />
+                            </span>
+                            <span className="bar-value">{(value * 100).toFixed(1)}%</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </details>
+                )}
+
+                <p className="feature-disclaimer">Experimental research result. Not a diagnosis.</p>
+              </div>
+            </article>
+          );
+        })}
+
+        {analyzing && (
+          <article className="panel result-row is-pending" aria-busy="true">
+            <img className="result-thumb" src={analyzing.url} alt="" />
+            <div className="result-body">
+              <p className="result-working"><Loader2 className="animate-spin" /> Analyzing {analyzing.file.name}…</p>
+            </div>
+          </article>
+        )}
+      </section>
     </div>
   );
 }
