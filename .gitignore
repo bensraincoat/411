@@ -29,7 +29,6 @@ api/users.db
 api/appointments.db
 api/doctor_notes.db
 api/consents.db# RETINA26 model weights
-*.pt
 *.pth
 *.onnx
 # Local research databases
