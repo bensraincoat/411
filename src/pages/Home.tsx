@@ -1,7 +1,6 @@
 import {
   ArrowRight,
   ClipboardPlus,
-  Eye,
   ScanEye,
   ScanSearch,
   Share2,
@@ -11,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { AppShell } from "../components/AppShell";
+import { ModelComparison } from "../components/ModelComparison";
 import { Link } from "../router";
 
 const steps = [
@@ -57,90 +57,77 @@ const roles = [
 export function Home() {
   return (
     <AppShell tone="vanilla">
-      <main>
-        <section className="hero-band">
-          <div className="hero-inner">
-            <div>
-              <span className="eyebrow">
-                <ScanEye />
-                Open source · Diabetic retinopathy
-              </span>
+      <main className="home-main">
+        <section className="home-hero">
+          <div>
 
-              <h1>
-                An open-source platform for <em>diabetic retinopathy</em> screening.
-              </h1>
+            <h1>
+              An open-source platform for <em>diabetic retinopathy</em> screening.
+            </h1>
 
-              <p>
-                From retinal photograph to explained result, for patients,
-                nurses, and ophthalmologists.
-              </p>
+            <p className="lede">
+              From retinal photograph to explained result, for patients,
+              nurses, and ophthalmologists.
+            </p>
 
-              <div className="hero-actions">
-                <Link className="btn btn-lg" to="/analyze">
-                  Start a screening
-                  <ArrowRight />
-                </Link>
+            <div className="hero-actions">
+              <Link className="btn btn-lg" to="/analyze">
+                Start a screening
+                <ArrowRight />
+              </Link>
 
-                <Link className="text-link" to="/auth">
-                  Sign in
-                  <ArrowRight />
-                </Link>
-              </div>
-            </div>
-
-            <div
-              className="eye-visual"
-              aria-label="Abstract visualization of a retinal scan"
-            >
-              <span className="retina-ring ring-one" />
-              <span className="retina-ring ring-two" />
-
-              <span className="optic-disc">
-                <Eye />
-              </span>
-
-              <span className="scan-line" />
+              <Link className="text-link" to="/auth">
+                Sign in
+                <ArrowRight />
+              </Link>
             </div>
           </div>
+
+          <ModelComparison />
         </section>
 
-        <section className="content-band home-section">
-          <h2 className="home-heading">How it works</h2>
+        <div className="home-bottom">
+          <section aria-labelledby="how-heading">
+            <h2 id="how-heading" className="home-heading">How it works</h2>
 
-          <div className="step-grid">
-            {steps.map(({ icon: Icon, title, text }, index) => (
-              <article key={title} className="step">
-                <span className="step-number">{index + 1}</span>
-                <Icon aria-hidden="true" />
-                <h3>{title}</h3>
-                <p>{text}</p>
-              </article>
-            ))}
-          </div>
-        </section>
+            <ol className="home-list">
+              {steps.map(({ icon: Icon, title, text }, index) => (
+                <li key={title}>
+                  <Icon aria-hidden="true" />
+                  <div>
+                    <strong>{index + 1}. {title}</strong>
+                    <span>{text}</span>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </section>
 
-        <section className="content-band home-section home-section-last">
-          <h2 className="home-heading">Built for the whole care team</h2>
+          <section aria-labelledby="team-heading">
+            <h2 id="team-heading" className="home-heading">Built for the whole care team</h2>
 
-          <div className="role-grid">
-            {roles.map(({ icon: Icon, title, text, to, cta, soon }) => (
-              <article key={title} className="role-card">
-                <Icon aria-hidden="true" />
-                <h3>
-                  {title}
-                  {soon && <span className="soon-tag">Coming soon</span>}
-                </h3>
-                <p>{text}</p>
-                {to && (
-                  <Link className="text-link" to={to}>
-                    {cta}
-                    <ArrowRight />
-                  </Link>
-                )}
-              </article>
-            ))}
-          </div>
-        </section>
+            <ul className="home-list">
+              {roles.map(({ icon: Icon, title, text, to, cta, soon }) => (
+                <li key={title}>
+                  <Icon aria-hidden="true" />
+                  <div>
+                    <strong>
+                      {title}
+                      {soon && <span className="soon-tag">Coming soon</span>}
+                      {to && (
+                        <Link className="text-link" to={to}>
+                          {cta}
+                          <ArrowRight />
+                        </Link>
+                      )}
+                    </strong>
+                    <span>{text}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
       </main>
     </AppShell>
   );
