@@ -1,7 +1,7 @@
 /* openI registration: US height/weight, unobtrusive health history.
    Intentionally scoped so existing site pages keep their original theme. */
 .auth-frame .oi-measurements-title {
-  margin: 20px 0 12px;
+  margin: 8px 0 0;
   color: var(--foreground);
   font-size: 1rem;
   font-weight: 650;
@@ -12,12 +12,14 @@
   grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
   gap: 18px;
   width: 100%;
-  align-items: end;
+  align-items: stretch;
 }
 .auth-frame .oi-height-field, .auth-frame .oi-weight-field { min-width: 0; }
-.auth-frame .oi-field-label { display: block; font-weight: 600; margin: 0 0 8px; }
+.auth-frame .oi-field-label { display: block; margin: 0 0 6px; color: var(--muted-foreground); font-size: 14px; font-weight: 600; }
+.auth-frame .oi-weight-field { display: flex; flex-direction: column; }
+.auth-frame .oi-weight-field input { margin-top: auto; }
 .auth-frame .oi-height-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.auth-frame .oi-height-pair label { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: .88rem; color: var(--muted-foreground); }
+.auth-frame .oi-height-pair label { display: flex; flex-direction: column; gap: 0; min-width: 0; font-size: 14px; font-weight: 600; color: var(--muted-foreground); }
 .auth-frame .oi-measurements-grid input[type=number] {
   display: block; width: 100%; min-width: 0; box-sizing: border-box;
 }
