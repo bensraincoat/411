@@ -1,129 +1,257 @@
-import { useRef, useState } from "react";
-import { FileImage, LoaderCircle, ScanLine, Trash2, UploadCloud } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, Info, Loader2, ScanLine, ScanEye, UploadCloud, X } from "lucide-react";
+import { errorMessage, predictRetinalImage, type Prediction } from "../api";
+import { Button } from "./ui";
+import { Link } from "../router";
+import { ResearchScanExplanation } from "./ResearchScanExplanation";
 
-import { Button, Input } from "./ui";
-import { compareModels, confirmScanReview, errorMessage, predictRetinalImage, type ModelComparison, type Prediction } from "../api";
+type Preview = { file: File; url: string };
+const MAX_FILES = 6;
+const MAX_SIZE_BYTES = 10 * 1024 * 1024;
+const VALID_TYPES = ["image/png", "image/jpeg"];
+const GRADES = ["No DR", "Mild NPDR", "Moderate NPDR", "Severe NPDR", "Proliferative DR"];
 
-export const MODELS = ["DenseNet121", "ResNet50", "InceptionV3", "MobileNetV2", "Xception"];
-
-type ScanResult = {
-  file: File;
-  url: string;
-  prediction?: Prediction;
-  comparison?: ModelComparison;
-  error?: string;
-  confirmed?: boolean;
-};
-
-const pct = (value: number) => Math.round(value <= 1 ? value * 100 : value);
-
-export function ScanUploader({ compare = false }: { compare?: boolean }) {
-  const [files, setFiles] = useState<File[]>([]);
-  const [patientId, setPatientId] = useState("P-10432");
-  const [model, setModel] = useState("DenseNet121");
-  const [selectedModels, setSelectedModels] = useState(["DenseNet121", "InceptionV3", "Xception"]);
-  const [results, setResults] = useState<ScanResult[]>([]);
-  const [processing, setProcessing] = useState(false);
+/** Experimental predictions saved only to authenticated research-test history. */
+export function ScanUploader() {
+  const [previews, setPreviews] = useState<Preview[]>([]);
+  const [results, setResults] = useState<Record<string, Prediction>>({});
   const [error, setError] = useState("");
+  const [running, setRunning] = useState(false);
+  const [completed, setCompleted] = useState(0);
+  const [confirmedTestData, setConfirmedTestData] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const previewsRef = useRef<Preview[]>([]);
 
-  function accept(next: FileList | null) {
-    if (!next) return;
-    const valid = Array.from(next).filter((file) => ["image/png", "image/jpeg"].includes(file.type));
-    if (valid.length !== next.length) setError("Only PNG and JPG retinal photographs can be analyzed.");
-    else setError("");
-    setFiles((current) => [...current, ...valid].slice(0, 6));
-    setResults([]);
+  useEffect(() => { previewsRef.current = previews; }, [previews]);
+  useEffect(() => {
+    return () => previewsRef.current.forEach((p) => URL.revokeObjectURL(p.url));
+  }, []);
+
+  function addFiles(list: FileList | null) {
+    if (!list || list.length === 0 || running) return;
+    const candidates = Array.from(list);
+    const valid = candidates.filter((file) =>
+      VALID_TYPES.includes(file.type) && file.size <= MAX_SIZE_BYTES
+    );
+    setError(valid.length === candidates.length ? "" : "Only JPG/PNG images of 10 MB or less are supported.");
+    const available = Math.max(0, MAX_FILES - previews.length);
+    const selected = valid.slice(0, available);
+    if (valid.length > available) setError(`You can select up to ${MAX_FILES} images at once.`);
+    const added = selected.map((file) => ({ file, url: URL.createObjectURL(file) }));
+    setPreviews((current) => [...current, ...added]);
+    if (inputRef.current) inputRef.current.value = "";
   }
 
-  async function processFiles() {
-    if (!files.length) return setError("Add at least one retinal photograph first.");
-    if (!patientId.trim()) return setError("Enter a patient ID.");
-    if (compare && selectedModels.length < 2) return setError("Select at least two models to compare.");
-    setError(""); setProcessing(true); setResults([]);
-
-    const next = await Promise.all(files.map(async (file): Promise<ScanResult> => {
-      const url = URL.createObjectURL(file);
-      try {
-        if (compare) return { file, url, comparison: await compareModels(file, patientId.trim(), selectedModels) };
-        return { file, url, prediction: await predictRetinalImage(file, patientId.trim(), model) };
-      } catch (err) {
-        return { file, url, error: errorMessage(err) };
-      }
-    }));
-    setResults(next);
-    setProcessing(false);
+  function removeFile(url: string) {
+    URL.revokeObjectURL(url);
+    setPreviews((current) => current.filter((p) => p.url !== url));
+    setResults((current) => {
+      const next = { ...current };
+      delete next[url];
+      return next;
+    });
   }
 
-  async function confirm(index: number) {
-    const scanId = results[index]?.prediction?.scan_id;
+  function clearFiles() {
+    previews.forEach((p) => URL.revokeObjectURL(p.url));
+    setPreviews([]);
+    setResults({});
+    setError("");
+    setConfirmedTestData(false);
+    setCompleted(0);
+  }
+
+  async function runScreening() {
+    if (running || previews.length === 0 || !confirmedTestData) return;
+    setError("");
+    setResults({});
+    setRunning(true);
+    setCompleted(0);
     try {
-      if (scanId) await confirmScanReview(scanId);
-      setResults((current) => current.map((r, i) => i === index ? { ...r, confirmed: true } : r));
+      // Sequential CPU inference avoids running multiple models simultaneously.
+      for (const [index, item] of previews.entries()) {
+        const prediction = await predictRetinalImage(item.file, "", "YOLO26 Nano");
+        setResults((current) => ({ ...current, [item.url]: prediction }));
+        setCompleted(index + 1);
+      }
     } catch (err) {
-      setResults((current) => current.map((r, i) => i === index ? { ...r, error: errorMessage(err) } : r));
+      setError(`${errorMessage(err)} Results already completed remain visible.`);
+    } finally {
+      setRunning(false);
     }
   }
 
+  const analyzing = running ? previews[completed] : undefined;
+  const finished = previews.filter((item) => results[item.url]);
+  const canRun = !running && previews.length > 0 && confirmedTestData;
+
   return (
-    <div className="scan-workspace">
-      <div className="scan-controls">
-        <div className="field-group"><label htmlFor="patient-id">Patient ID</label><Input id="patient-id" value={patientId} onChange={(e) => setPatientId(e.target.value)} /></div>
-        {!compare ? (
-          <div className="field-group"><label htmlFor="model">Analysis model</label><select id="model" value={model} onChange={(e) => setModel(e.target.value)}>{MODELS.map((item) => <option key={item}>{item}</option>)}</select></div>
-        ) : (
-          <fieldset className="model-picker"><legend>Models to compare</legend>{MODELS.map((item) => <label key={item}><input type="checkbox" checked={selectedModels.includes(item)} onChange={() => setSelectedModels((current) => current.includes(item) ? current.filter((value) => value !== item) : [...current, item])} />{item}</label>)}</fieldset>
+    <div className="scan-layout">
+
+      {/* ---------- LEFT: add photographs and run ---------- */}
+      <section className="panel scan-panel" aria-label="Add photographs">
+        <h2 className="card-title">Photographs</h2>
+
+        <button
+          type="button"
+          className={`drop-zone${dragging ? " is-dragging" : ""}`}
+          disabled={running}
+          onClick={() => inputRef.current?.click()}
+          onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragging(false);
+            addFiles(event.dataTransfer.files);
+          }}
+        >
+          <span className="upload-orbit"><UploadCloud /></span>
+          <strong>Add retinal photographs</strong>
+          <small>Click or drag · JPG/PNG · up to {MAX_FILES} files · 10 MB each</small>
+        </button>
+        <input ref={inputRef} hidden type="file" accept="image/png,image/jpeg"
+          multiple disabled={running} onChange={(event) => addFiles(event.target.files)} />
+
+        {previews.length > 0 && (
+          <ul className="upload-list">
+            {previews.map(({ file, url }) => (
+              <li key={url}>
+                <img src={url} alt="" />
+                <span title={file.name}>{file.name}</span>
+                {results[url] && <Check className="upload-done" aria-label="Analyzed" />}
+                <button type="button" aria-label={`Remove ${file.name}`}
+                  disabled={running} onClick={() => removeFile(url)}><X /></button>
+              </li>
+            ))}
+          </ul>
         )}
-      </div>
 
-      <button type="button" className="drop-zone" onClick={() => inputRef.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); accept(e.dataTransfer.files); }}>
-        <span className="upload-orbit"><UploadCloud /></span><strong>Drop retinal photographs here</strong><small>or click to browse · PNG or JPG · up to 6 files</small>
-      </button>
-      <input ref={inputRef} hidden type="file" accept="image/png,image/jpeg" multiple onChange={(e) => accept(e.target.files)} />
+        {previews.length > 0 && (
+          <label className="confirm-check">
+            <input type="checkbox" checked={confirmedTestData} disabled={running}
+              onChange={(e) => setConfirmedTestData(e.target.checked)} />
+            <span>I confirm these are non-identifiable retinal fundus test images.</span>
+          </label>
+        )}
 
-      {files.length > 0 && <div className="file-strip">{files.map((file, index) => <div key={`${file.name}-${index}`}><FileImage /><span>{file.name}</span><button aria-label={`Remove ${file.name}`} onClick={() => setFiles((current) => current.filter((_, i) => i !== index))}><Trash2 /></button></div>)}</div>}
-      {error && <p className="form-error" role="alert">{error}</p>}
-      <div className="process-row"><span>{files.length} photograph{files.length === 1 ? "" : "s"} ready</span><div><Button variant="outline" onClick={() => { setFiles([]); setResults([]); }}>Clear</Button><Button onClick={processFiles} disabled={processing}>{processing ? <><LoaderCircle className="animate-spin" />Analyzing</> : <><ScanLine />{compare ? "Compare results" : "Analyze photographs"}</>}</Button></div></div>
+        {error && <p className="form-error" role="alert">{error}</p>}
 
-      {results.length > 0 && (
-        <section className="results-section" aria-live="polite">
-          <div className="section-heading"><span>Screening output</span><h2>{compare ? "Model comparison" : "Analysis results"}</h2></div>
-          <div className="result-grid">
-            {results.map((result, index) => {
-              const p = result.prediction;
-              const c = result.comparison;
-              const grade = p?.grade ?? c?.consensus_grade ?? c?.results[0]?.grade;
-              const label = p?.label ?? c?.consensus_label ?? c?.results[0]?.label;
-              const confidence = p?.confidence ?? c?.results[0]?.confidence;
-              return (
-                <article className="result-card" key={result.url}>
-                  <img src={result.url} alt={`Uploaded retinal photograph ${result.file.name}`} />
-                  <div className="result-content">
-                    {result.error ? (
-                      <><h3>Analysis unavailable</h3><p className="form-error" role="alert">{result.error}</p></>
-                    ) : (
-                      <>
-                        <div className="result-top"><span className={`grade grade-${grade ?? 0}`}>Level {grade ?? "–"}</span>{confidence !== undefined && <span>{pct(confidence)}% confidence</span>}</div>
-                        <h3>{label}</h3>
-                        
-                        {p?.model && <p><b>Model:</b> {p.model}</p>}
-                        {c ? (
-                          <div className="comparison-list">
-                            {c.results.map((r) => <div key={r.model}><span>{r.model}</span><strong>Level {r.grade} · {pct(r.confidence)}%</strong></div>)}
-                            {c.agreement !== undefined && <p><b>Agreement:</b> {c.agreement}/{c.results.length} models</p>}
-                          </div>
-                        ) : <p>{p?.explanation}</p>}
-                      </>
-                    )}
-                    <div className="result-foot"><span>{result.file.name}</span>{!result.error && <Button variant="outline" size="sm" onClick={() => confirm(index)} disabled={result.confirmed}>{result.confirmed ? "Review confirmed" : "Confirm review"}</Button>}</div>
-                  </div>
-                </article>
-              );
-            })}
+        <Button type="button" size="lg" className="w-full" disabled={!canRun} onClick={runScreening}>
+          <ScanLine /> {running ? `Analyzing ${completed + 1} of ${previews.length}…` : "Begin openI scan"}
+        </Button>
+
+        {running && (
+          <span className="bar-track" role="progressbar" aria-label="Analysis progress"
+            aria-valuemin={0} aria-valuemax={previews.length} aria-valuenow={completed}>
+            <span className="bar-fill is-progress" style={{ width: `${(completed / previews.length) * 100}%` }} />
+          </span>
+        )}
+
+        {previews.length > 0 && !running && (
+          <Button variant="ghost" type="button" size="sm" className="clear-link" onClick={clearFiles}>
+            Clear all
+          </Button>
+        )}
+
+        <div className="research-note">
+          <p>
+            <Info aria-hidden="true" />
+            Research use only. Use non-identifiable fundus photographs. Results are not a diagnosis.
+          </p>
+          <details>
+            <summary>About this test</summary>
+            <p>
+              This experimental classifier (YOLO26 Nano) is not clinically validated. Never rely on its
+              grade for diagnosis or treatment, and do not upload identifiable patient records.
+              Experimental Grad-CAM explanations are available on saved test results. Images are
+              processed locally by Flask, and test predictions and images are stored in your private
+              research history. Only authorized clinicians can access them.
+            </p>
+          </details>
+        </div>
+      </section>
+
+
+      {/* ---------- RIGHT: results ---------- */}
+      <section className="scan-results" aria-label="Retinal research predictions" aria-live="polite">
+        {finished.length === 0 && !analyzing && (
+          <div className="panel results-empty">
+            <div className="mini-retina"><ScanEye /></div>
+            <h2>{previews.length === 0 ? "Results will appear here" : "Ready to scan"}</h2>
+            <p>
+              {previews.length === 0
+                ? "Add one or more retinal photographs to get started."
+                : "Confirm the images are test photographs, then begin the scan."}
+            </p>
           </div>
-          <aside className="clinical-note"><strong>Clinical review required</strong><p>These results are screening support only. They are not a diagnosis or treatment recommendation.</p></aside>
-        </section>
-      )}
+        )}
+
+        {finished.map(({ file, url }) => {
+          const prediction = results[url];
+          return (
+            <article className="panel result-row" key={url}>
+              <img className="result-thumb" src={url} alt={`Retinal test photograph ${file.name}`} />
+
+              <div className="result-body">
+                <div className="result-heading">
+                  <span className={`grade grade-${prediction.grade}`}>Level {prediction.grade}</span>
+                  <h2>{prediction.label}</h2>
+                </div>
+
+                <p className="result-meta">
+                  <span title="A model score, not a clinical probability">
+                    {(prediction.confidence * 100).toFixed(1)}% model score
+                  </span>
+                  <span className="result-file" title={file.name}>{file.name}</span>
+                </p>
+
+                {prediction.scan_id && (
+                  <p className="result-saved">
+                    <Check aria-hidden="true" /> Saved to research history ·{" "}
+                    <Link to="/dashboard">View in portal</Link>
+                  </p>
+                )}
+
+                {prediction.scan_id && (
+                  <ResearchScanExplanation scanId={prediction.scan_id} grade={prediction.grade} label={prediction.label} />
+                )}
+
+                {prediction.probabilities && (
+                  <details className="score-details">
+                    <summary>All five model scores</summary>
+                    <ul className="bars">
+                      {GRADES.map((name) => {
+                        const value = prediction.probabilities?.[name] ?? 0;
+                        return (
+                          <li key={name} className={`bar-row${name === prediction.label ? " is-top" : ""}`}>
+                            <span className="bar-name">{name}</span>
+                            <span className="bar-track" aria-hidden="true">
+                              <span className="bar-fill" style={{ width: `${value * 100}%` }} />
+                            </span>
+                            <span className="bar-value">{(value * 100).toFixed(1)}%</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </details>
+                )}
+
+                <p className="feature-disclaimer">Experimental research result. Not a diagnosis.</p>
+              </div>
+            </article>
+          );
+        })}
+
+        {analyzing && (
+          <article className="panel result-row is-pending" aria-busy="true">
+            <img className="result-thumb" src={analyzing.url} alt="" />
+            <div className="result-body">
+              <p className="result-working"><Loader2 className="animate-spin" /> Analyzing {analyzing.file.name}…</p>
+            </div>
+          </article>
+        )}
+      </section>
     </div>
   );
 }

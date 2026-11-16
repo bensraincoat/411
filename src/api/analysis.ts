@@ -2,9 +2,9 @@ import { apiRequest } from "./client";
 import type { ModelComparison, Prediction } from "./types";
 
 /**
- * POST /predict  (multipart/form-data)
- *   image: File, patient_id: string, model: string
- * → Prediction JSON
+ * POST /api/predict  (multipart/form-data)
+ *   images: File, patient_id: string, model: string
+ * → Experimental Prediction JSON; persisted for the signed-in patient
  */
 export async function predictRetinalImage(
   image: File,
@@ -25,6 +25,8 @@ export async function predictRetinalImage(
       label: string;
       confidence: number;
       message: string;
+      scan_id?: string;
+      probabilities?: Record<string, number>;
     }>;
   }>("/api/predict", {
     method: "POST",
@@ -37,8 +39,10 @@ export async function predictRetinalImage(
     grade: prediction.grade,
     label: prediction.label,
     confidence: prediction.confidence,
+    scan_id: prediction.scan_id,
     explanation: prediction.message,
     model: prediction.model,
+    probabilities: prediction.probabilities,
   };
 }
 

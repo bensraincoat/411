@@ -3,11 +3,15 @@ import {
   LayoutDashboard,
   LogIn,
   LogOut,
-  ScanEye
+  Moon,
+  Sun
 } from "lucide-react";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { useTheme } from "../hooks/useTheme";
 import { Link } from "../router";
+import { apiRequest } from "../api/client";
+import type { User } from "../api/types";
 import { logout } from "../api";
 
 
@@ -41,6 +45,26 @@ export function AppShell({
   const signedIn = Boolean(
     localStorage.getItem("openi.token")
   );
+  const { theme, toggle } = useTheme();
+
+  // Resolve the authenticated account role from Flask, not a guess or URL.
+  const [portalRole, setPortalRole] = useState<"patient" | "doctor" | null>(null);
+  useEffect(() => {
+    if (!signedIn) {
+      setPortalRole(null);
+      return;
+    }
+    let active = true;
+    apiRequest<User>("/api/auth/me")
+      .then((user) => {
+        if (!active) return;
+        setPortalRole(user.role === "doctor" || user.role === "patient" ? user.role : null);
+      })
+      .catch(() => {
+        if (active) setPortalRole(null);
+      });
+    return () => { active = false; };
+  }, [signedIn]);
 
   async function handleLogout() {
     await logout();
@@ -65,24 +89,40 @@ export function AppShell({
             <EyeMark />
           </Link>
 
-          <nav
-            aria-label="Primary navigation"
-            className="nav-links"
-          >
-            <Link to="/">Overview</Link>
-            <Link to="/analyze">Analyze</Link>
-            <Link to="/compare">Compare</Link>
-          </nav>
+          {!signedIn && (
+            <nav aria-label="Primary navigation" className="nav-links">
+              <Link to="/">Home</Link>
+              <Link to="/analyze">Screening</Link>
+            </nav>
+          )}
 
           <div className="nav-actions">
-            <Link
-              to="/book"
-              className="btn btn-ghost btn-sm header-booking"
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm theme-toggle"
+              onClick={toggle}
+              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+              title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
             >
-              <CalendarDays />
-              Book an appointment
-            </Link>
+              {theme === "dark" ? <Sun /> : <Moon />}
+            </button>
 
+            {!signedIn && (
+              <Link to="/book" className="btn btn-ghost btn-sm header-booking">
+                <CalendarDays /> Book an appointment
+              </Link>
+            )}
+
+            {signedIn && portalRole && (
+              <Link
+                to={portalRole === "doctor" ? "/doctor" : "/dashboard"}
+                className="btn btn-ghost btn-sm openi-portal-shortcut"
+                aria-label={portalRole === "doctor" ? "Doctor portal" : "Patient portal"}
+              >
+                <LayoutDashboard />
+                <span>My portal</span>
+              </Link>
+            )}
             {signedIn ? (
               <button
                 type="button"
@@ -115,35 +155,8 @@ export function AppShell({
           Not a medical diagnosis.
         </p>
 
-        <Link to="/doctor">
-          <ScanEye />
-          Clinician workspace
-        </Link>
-
-        <Link to="/dashboard">
-          <LayoutDashboard />
-          Patient portal
-        </Link>
+        {/* Portal entry points belong on the public homepage, not every page. */}
       </footer>
-    </div>
-  );
-}
-
-
-export function PageIntro({
-  eyebrow,
-  title,
-  description
-}: {
-  eyebrow: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="page-intro">
-      <span>{eyebrow}</span>
-      <h1>{title}</h1>
-      <p>{description}</p>
     </div>
   );
 }
