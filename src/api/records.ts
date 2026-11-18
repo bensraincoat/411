@@ -17,11 +17,33 @@ export const listDoctors = () =>
 export const listAppointments = () =>
   apiRequest<Appointment[]>("/api/appointments");
 
+export type PatientNotification = {
+  id: string;
+  patient_id: string;
+  appointment_id: string | null;
+  title: string;
+  message: string;
+  is_read: number;
+  created_at: string;
+};
+
+export const listMyNotifications = () =>
+  apiRequest<PatientNotification[]>("/api/notifications");
+
 export const requestAppointment = (payload: AppointmentRequest) =>
   apiRequest<Appointment>("/api/appointments", {
     method: "POST",
     body: payload
   });
+
+export const markNotificationAsRead = (notificationId: string) =>
+  apiRequest<{ message: string }>(
+    `/api/notifications/${encodeURIComponent(notificationId)}/read`,
+    {
+      method: "PATCH",
+    }
+  );
+
 
 // Doctor-only: accept or decline an assigned appointment.
 export const updateAppointmentStatus = (

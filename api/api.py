@@ -36,6 +36,9 @@ from appointments_db import (
     get_appointments_for_doctor,
     get_appointment_by_id,
     update_appointment_status,
+    create_notification,
+    get_notifications_for_patient,
+    mark_notification_as_read,
 )
 
 from doctor_notes_db import (
@@ -315,7 +318,7 @@ def doctors():
             "id": doctor["id"],
             "name": doctor["full_name"],
             "specialty": "Ophthalmologist",
-            "clinic": doctor["clinic"] or "Clinic not provided", 
+            "clinic": doctor["clinic"] or "Clinic not provided",
         })
 
     return jsonify(results)
@@ -370,7 +373,7 @@ def create_appointment_route():
         return jsonify({"error": "Choose a future appointment time"}), 400
 
     doctor = get_user_by_id(doctor_id)
-        
+
 
     if doctor is None or doctor["role"] != "doctor":
         return jsonify({
@@ -442,7 +445,57 @@ def change_appointment_status_route(appointment_id):
         return jsonify({
             "error": "Request was already processed or the slot conflicts with a confirmed appointment"
         }), 409
+
+    if new_status == "confirmed":
+        title = "Appointment Confirmed"
+        message = f"Your appointment on {updated['date']} at {updated['time']} has been confirmed."
+
+    else:
+        title = "Appointment Declined"
+        message = f"Your appointment request for {updated['date']} at{updated['time']} " "was declined."
+
+
+    create_notification(
+        patient_id=updated["patient_id"],
+        appointment_id=updated["id"],
+        title=title,
+        message=message,
+    )
+
+
+
     return jsonify(updated)
+
+@app.route("/api/notifications", methods=["GET"])
+def list_notifications_route():
+    user = authenticated_user()
+    if user is None:
+        return jsonify({"error": "Authentication required"}), 401
+
+    if user["role"] != "patient":
+        return jsonify({"error": "Patient access required"}), 403
+
+    notifications = get_notifications_for_patient(user["id"])
+    return jsonify(notifications)
+
+
+@app.route("/api/notifications/<notification_id>/read", methods=["PATCH"])
+def mark_notification_read_route(notification_id):
+    user = authenticated_user()
+
+    if user is None:
+        return jsonify({"error": "Authentication required"}), 401
+
+    if user["role"] != "patient":
+        return jsonify({"error": "Patient access required"}), 403
+
+    updated = mark_notification_as_read(notification_id, user["id"])
+
+    if not updated:
+        return jsonify({"error": "Notification not found"}), 404
+
+    return jsonify({"message": "Notification marked as read"})
+
 # -------------------------------------------------
 # Doctor portal
 # -------------------------------------------------

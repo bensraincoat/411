@@ -1,13 +1,21 @@
-import { removeNoteFromPatientView } from "../api/records";
+import {
+  removeNoteFromPatientView,
+  listMyNotifications,
+  markNotificationAsRead,
+  type PatientNotification,
+} from "../api/records";
+
+
 import { ResearchScanImage } from "../components/ResearchScanImage";
 import { ResearchScanExplanation } from "../components/ResearchScanExplanation";
 import { PatientGreeting } from "../components/PatientDashboardEnhancements";
 import { useState, type FormEvent } from "react";
-import { CalendarPlus, ScanEye } from "lucide-react";
+import { Bell, CalendarPlus, ScanEye } from "lucide-react";
 
 import { AppShell } from "../components/AppShell";
 import { Button, Input } from "../components/ui";
 import { Link } from "../router";
+
 
 import {
   errorMessage,
@@ -45,6 +53,7 @@ export function Dashboard() {
   const [clinicianPicker, setClinicianPicker] = useState(false);
   const [clinicianError, setClinicianError] = useState("");
   const [savingDoctorId, setSavingDoctorId] = useState<string | null>(null);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   const { data: scans } = useApi(listMyScans, []);
   const [showAllScans, setShowAllScans] = useState(false);
@@ -69,6 +78,30 @@ export function Dashboard() {
     data: appointments,
     setData: setAppointments,
   } = useApi<Appointment[]>(listAppointments, []);
+
+  const {
+    data: notifications,
+    setData: setNotifications,
+  } = useApi<PatientNotification[]>(
+    listMyNotifications,
+    []);
+
+  async function handleMarkAsRead(notificationId: string) {
+    try {
+      await markNotificationAsRead(notificationId);
+
+      setNotifications(
+        notifications.map((notification) =>
+          notification.id === notificationId
+            ? { ...notification, is_read: 1 }
+            : notification
+        )
+      );
+    } catch (error) {
+      alert(errorMessage(error));
+    }
+  }
+
 
   const [showAllNotes, setShowAllNotes] = useState(false);
   const [removingNoteId, setRemovingNoteId] = useState<string | null>(null);
@@ -249,10 +282,62 @@ export function Dashboard() {
             <h1><PatientGreeting /></h1>
           </div>
 
-          <Link className="btn btn-lg" to="/analyze">
-            <ScanEye />
-            New screening
-          </Link>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", position: "relative" }}>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setShowNotifications(!showNotifications)}
+              aria-label="Notifications"
+            >
+              <Bell size={20} />
+              {notifications.filter((n) => n.is_read === 0).length}
+            </button>
+
+            {showNotifications && (
+              <div
+                className="panel"
+                style={{
+                  position: "absolute",
+                  top: "calc(100% + 8px)",
+                  right: 0,
+                  width: "340px",
+                  maxWidth: "90vw",
+                  maxHeight: "320px",
+                  overflowY: "auto",
+                  padding: "16px",
+                  zIndex: 20,
+                }}
+              >
+                <h3>Notifications</h3>
+
+                {notifications.length === 0 ? (
+                  <p>No Notifications yet.</p>
+                ) : (
+                  notifications.map((notification) => (
+                    <div key={notification.id} style={{ marginTop: "12px" }}>
+                      <strong>{notification.title}</strong>
+                      <p>{notification.message}</p>
+                      {notification.is_read=== 0 && (
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => void handleMarkAsRead(notification.id)}
+                          style={{ marginTop: "8px" }}
+                        >
+                          Mark as Read
+                        </button>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            <Link className="btn" to="/analyze">
+              <ScanEye />
+              New screening
+            </Link>
+          </div>
         </header>
 
         <div className="dash-grid">

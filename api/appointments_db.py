@@ -29,8 +29,52 @@ def init_appointments_db():
         )
     """)
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS notifications (
+            id TEXT PRIMARY KEY,
+            patient_id TEXT NOT NULL,
+            appointment_id TEXT,
+            title TEXT NOT NULL,
+            message TEXT NOT NULL,
+            is_read INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL
+            )
+    """)
+
     conn.commit()
     conn.close()
+
+def create_notification(patient_id, appointment_id, title, message):
+    notification_id = str(uuid.uuid4())
+
+    conn = get_connection()
+
+    try:
+        conn.execute("""
+            INSERT INTO notifications (
+                id,
+                patient_id,
+                appointment_id,
+                title,
+                message,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            notification_id,
+            patient_id,
+            appointment_id,
+            title,
+            message,
+            datetime.now().isoformat()
+        ))
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    return notification_id
+
 
 
 def create_appointment(
@@ -180,3 +224,45 @@ def update_appointment_status(appointment_id, doctor_id, new_status):
         conn.close()
 
     return get_appointment_by_id(appointment_id)
+
+
+
+
+def get_notifications_for_patient(patient_id):
+    conn = get_connection()
+
+    try:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM notifications
+            WHERE patient_id = ?
+            ORDER BY created_at DESC
+            """,
+            (patient_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    finally:
+        conn.close()
+
+
+def mark_notification_as_read(notification_id, patient_id):
+    conn = get_connection()
+
+    try:
+        cursor = conn.execute(
+            """
+            UPDATE notifications
+            SET is_read = 1
+            WHERE id = ? AND patient_id = ?
+            """,
+            (notification_id, patient_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+
