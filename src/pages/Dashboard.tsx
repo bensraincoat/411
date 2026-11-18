@@ -2,7 +2,10 @@ import {
   removeNoteFromPatientView,
   listMyNotifications,
   markNotificationAsRead,
+  listMyRescheduleProposals,
+  respondToRescheduleProposal,
   type PatientNotification,
+  type RescheduleProposal,
 } from "../api/records";
 
 
@@ -85,6 +88,48 @@ export function Dashboard() {
   } = useApi<PatientNotification[]>(
     listMyNotifications,
     []);
+
+
+
+  const {
+    data: rescheduleProposals,
+    setData: setRescheduleProposals,
+  } = useApi<RescheduleProposal[]>(
+    listMyRescheduleProposals,
+    []
+  );
+
+
+async function handleRescheduleResponse(
+  proposal: RescheduleProposal,
+  accept: boolean
+) {
+  try {
+    await respondToRescheduleProposal(proposal.id, accept);
+
+    setRescheduleProposals(
+      rescheduleProposals.filter((item) => item.id !== proposal.id)
+    );
+
+    if (accept) {
+      setAppointments(
+        appointments.map((appointment) =>
+          appointment.id === proposal.appointment_id
+            ? {
+                ...appointment,
+                date: proposal.proposed_date,
+                time: proposal.proposed_time,
+                status: "confirmed" as const,
+              }
+            : appointment
+        )
+      );
+    }
+  } catch (error) {
+    alert(errorMessage(error));
+  }
+}
+
 
   async function handleMarkAsRead(notificationId: string) {
     try {
@@ -454,7 +499,46 @@ export function Dashboard() {
               ) : (
                 <p className="side-muted side-block">Nothing scheduled.</p>
               )}
+              {rescheduleProposals.length > 0 && (
+                <div className="side-block">
+                  <h3>Proposed Appointment Changes</h3>
 
+                  {rescheduleProposals.map((proposal) => (
+                    <div key={proposal.id} style={{ marginTop: "16px" }}>
+                      <p>
+                        <strong>Doctor:</strong> {proposal.doctor_name}
+                      </p>
+
+                      <p>
+                        <strong>Original:</strong> {(proposal.current_date)} at {" "}
+                        {(proposal.current_time)}
+                      </p>
+
+                      <p>
+                        <strong>Proposed:</strong> {(proposal.proposed_date)} at {" "}
+                        {(proposal.proposed_time)}
+                      </p>
+
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                        <Button
+                          size="sm"
+                          onClick={() => void handleRescheduleResponse(proposal, true)}
+                        >
+                          Accept New Time
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void handleRescheduleResponse(proposal, false)}
+                        >
+                          Decline New Time
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
               <Button variant="outline" className="w-full" onClick={() => setBooking(true)}>
                 <CalendarPlus />
                 Book appointment

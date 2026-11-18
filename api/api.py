@@ -39,6 +39,9 @@ from appointments_db import (
     create_notification,
     get_notifications_for_patient,
     mark_notification_as_read,
+    create_reschedule_proposal,
+    get_reschedule_proposals_for_patient,
+    respond_to_reschedule_proposal,
 )
 
 from doctor_notes_db import (
@@ -495,6 +498,92 @@ def mark_notification_read_route(notification_id):
         return jsonify({"error": "Notification not found"}), 404
 
     return jsonify({"message": "Notification marked as read"})
+
+
+@app.route("/api/appointments/<appointment_id>/reschedule-proposal", methods=["POST"])
+def propose_reschedule_route(appointment_id):
+    user = authenticated_user()
+
+    if user is None:
+        return jsonify({"error": "Authentication required"}), 401
+
+    if user["role"] != "doctor":
+        return jsonify({"error": "Doctor access required"}), 403
+
+    data = request.get_json(silent=True) or {}
+    new_date = data.get("date")
+    new_time = data.get("time")
+
+    if not isinstance(new_date, str) or not isinstance(new_time, str):
+        return jsonify({"error": "Date and time are required"}), 400
+
+    if not new_date.strip() or not new_time.strip():
+        return jsonify({"error": "Date and time are required"}), 400
+
+    proposal = create_reschedule_proposal(
+        appointment_id,
+        user["id"],
+        new_date.strip(),
+        new_time.strip()
+    )
+
+    if proposal is None:
+        return jsonify({"error": "Unable to propose reschedule"}), 409
+
+    create_notification(
+        patient_id=proposal["patient_id"],
+        appointment_id=appointment_id,
+        title="Appointment Reschedule Proposed",
+        message=f"Your doctor proposed a new appointment on {new_date} at {new_time}."
+    )
+
+    return jsonify(proposal), 201
+
+
+@app.route("/api/reschedule-proposals", methods=["GET"])
+def list_reschedule_proposals_route():
+    user = authenticated_user()
+
+    if user is None:
+        return jsonify({"error": "Authentication required"}), 401
+
+    if user["role"] != "patient":
+        return jsonify({"error": "Patient access required"}), 403
+
+    proposals = get_reschedule_proposals_for_patient(user["id"])
+
+    return jsonify(proposals)
+
+
+@app.route("/api/reschedule-proposals/<proposal_id>/respond", methods=["PATCH"])
+def respond_to_proposal_route(proposal_id):
+    user = authenticated_user()
+
+    if user is None:
+        return jsonify({"error": "Authentication required"}), 401
+
+    if user["role"] != "patient":
+        return jsonify({"error": "Patient access required"}), 403
+
+    data = request.get_json(silent=True) or {}
+    accept = data.get("accept")
+
+    if not isinstance(accept, bool):
+        return jsonify({"error": "Accept must be true or false"}), 400
+
+    result = respond_to_reschedule_proposal(
+        proposal_id,
+        user["id"],
+        accept
+    )
+
+    if result is None:
+        return jsonify({
+            "error": "Proposal unavailable or appointment time conflicts"
+        }), 409
+
+    return jsonify(result)
+
 
 # -------------------------------------------------
 # Doctor portal

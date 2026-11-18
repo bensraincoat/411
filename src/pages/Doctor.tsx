@@ -9,6 +9,7 @@ import {
   errorMessage,
   listAppointments,
   updateAppointmentStatus,
+  proposeAppointmentReschedule,
   type Appointment,
   getDoctorStats,
   listSharedPatients,
@@ -54,6 +55,39 @@ function DoctorAppointmentInbox({ onPendingCount }: { onPendingCount: (count: nu
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [reschedulingId, setReschedulingId] = useState<string | null>(null);
+  const [proposedDate, setProposedDate] = useState("");
+  const [proposedTime, setProposedTime] = useState("");
+
+
+async function submitReschedule(appointmentId: string) {
+  if (!proposedDate || !proposedTime) {
+    setError("Please select a new date and time.");
+    return;
+  }
+
+  setBusyId(appointmentId);
+  setError("");
+
+  try {
+    await proposeAppointmentReschedule(
+      appointmentId,
+      proposedDate,
+      proposedTime
+    );
+
+    setReschedulingId(null);
+    setProposedDate("");
+    setProposedTime("");
+
+    window.alert("New appointment time proposed successfully.");
+  } catch (err) {
+    setError(errorMessage(err));
+  } finally {
+    setBusyId(null);
+  }
+}
+
 
   useEffect(() => {
     let mounted = true;
@@ -118,7 +152,10 @@ function DoctorAppointmentInbox({ onPendingCount }: { onPendingCount: (count: nu
                   <small>{formatDay(appointment.date)} at {appointment.time}</small>
                   <small>{appointment.reason?.trim() || "No reason provided"}</small>
                 </div>
-                <div className="appt-actions">
+                <div
+                  className="appt-actions"
+                  style={{ flexWrap: "wrap", alignItems: "flex-start" }}
+                >
                   <Button size="sm" disabled={busyId !== null}
                     onClick={() => decide(appointment.id, "confirmed")}>
                     {busyId === appointment.id ? "Saving..." : "Confirm"}
@@ -127,6 +164,59 @@ function DoctorAppointmentInbox({ onPendingCount }: { onPendingCount: (count: nu
                     onClick={() => decide(appointment.id, "declined")}>
                     Decline
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busyId !== null}
+                    onClick={() => {
+                      setReschedulingId(appointment.id);
+                      setProposedDate("");
+                      setProposedTime("");
+                    }}
+                  >
+                    Propose New Time
+                  </Button>
+                  {reschedulingId === appointment.id && (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: "8px",
+                        marginTop: "8px",
+                        width: "100%",
+                      }}
+                    >
+                      <input
+                        type="date"
+                        aria-label="Proposed date"
+                        value={proposedDate}
+                        onChange={(e) => setProposedDate(e.target.value)}
+                      />
+
+                      <input
+                        type="time"
+                        aria-label="Proposed time"
+                        value={proposedTime}
+                        onChange={(e) => setProposedTime(e.target.value)}
+                      />
+
+                      <Button
+                        size="sm"
+                        disabled={busyId !== null}
+                        onClick={() => submitReschedule(appointment.id)}
+                      >
+                        Send Proposal
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setReschedulingId(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </article>
             ))}

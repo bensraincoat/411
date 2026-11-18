@@ -58,6 +58,51 @@ export const updateAppointmentStatus = (
     }
   );
 
+
+export const proposeAppointmentReschedule = (
+  appointmentId: string,
+  date: string,
+  time: string
+) =>
+  apiRequest<{ id: string; status: string }>(
+    `/api/appointments/${encodeURIComponent(appointmentId)}/reschedule-proposal`,
+    {
+      method: "POST",
+      body: { date, time },
+    }
+  );
+
+
+export type RescheduleProposal = {
+  id: string;
+  appointment_id: string;
+  proposed_date: string;
+  proposed_time: string;
+  current_date: string;
+  current_time: string;
+  doctor_name: string;
+  status: string;
+  created_at: string;
+};
+
+export const listMyRescheduleProposals = () =>
+  apiRequest<RescheduleProposal[]>("/api/reschedule-proposals");
+
+
+
+export const respondToRescheduleProposal = (
+  proposalId: string,
+  accept: boolean
+) =>
+  apiRequest<{ id: string; status: string }>(
+    `/api/reschedule-proposals/${encodeURIComponent(proposalId)}/respond`,
+    {
+      method: "PATCH",
+      body: { accept },
+    }
+  );
+
+
 // ---------- Patient history ----------
 export const listMyScans = () =>
   apiRequest<Scan[]>("/api/patients/me/scans");
